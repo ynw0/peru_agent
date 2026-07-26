@@ -1,6 +1,7 @@
 // Provider 配置只保存密钥引用，不保存明文密钥。
 export interface OpenAICompatibleProviderConfig {
   readonly baseUrl: string;
+  readonly chatCompletionsPath: string;
   readonly apiKeyReference: string;
   readonly model: string;
 }
@@ -11,6 +12,9 @@ export function validateProviderConfig(config: OpenAICompatibleProviderConfig): 
   }
   if (config.model.trim() === "") {
     throw new Error("模型名称不能为空");
+  }
+  if (!config.chatCompletionsPath.startsWith("/") || config.chatCompletionsPath.includes("..")) {
+    throw new Error("Chat Completions 路径必须是无上级跳转的绝对路径");
   }
 
   const url = new URL(config.baseUrl);

@@ -1,13 +1,13 @@
 {
   "name": "independent-ai-ide-core",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
     "build": "tsc",
-    "test": "npm run build && node --test dist/tests/policies.test.js dist/tests/phase1.test.js dist/tests/phase2.test.js",
-    "smoke": "npm run build && node dist/src/smoke.js && node dist/src/phase1-smoke.js && node dist/src/phase2-smoke.js",
+    "test": "npm run build && node --test dist/tests/policies.test.js dist/tests/phase1.test.js dist/tests/phase2.test.js dist/tests/phase3.test.js",
+    "smoke": "npm run build && node dist/src/smoke.js && node dist/src/phase1-smoke.js && node dist/src/phase2-smoke.js && node dist/src/phase3-smoke.js",
     "audit": "node tools/audit.mjs && node tools/code-oss/verify-overlay.mjs",
     "code-oss:import": "node tools/code-oss/import-archive.mjs",
     "code-oss:apply-overlay": "node tools/code-oss/verify-overlay.mjs && node tools/code-oss/apply-overlay.mjs",

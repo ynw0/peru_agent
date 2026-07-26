@@ -261,7 +261,17 @@ Windows Native Brokers
 - 添加 Agent Activity Bar、Chat、Task 和 Permission 容器；
 - 建立 Typed IPC。
 
-### Phase 2：自研 Agent Core
+### Phase 2：真实 Code OSS Workbench 接入
+
+置信度：92/100
+
+- 导入并验证固定 Code OSS 1.74.0 源码；
+- 应用独立产品 Overlay；
+- 注册 Agent、Tasks、Permissions、Browser 原生容器；
+- 验证固定版本 Workbench API 契约；
+- 完整编译和桌面启动需匹配的上游依赖与 Node.js 16.14。
+
+### Phase 3：自研 Agent Core
 
 置信度：93/100
 
@@ -272,7 +282,7 @@ Windows Native Brokers
 - 中断、恢复、最大轮次和预算；
 - OpenAI 兼容 Model Gateway。
 
-### Phase 3：工作区工具和 Diff
+### Phase 4：工作区工具和 Diff
 
 置信度：91/100
 
@@ -282,7 +292,7 @@ Windows Native Brokers
 - Diff 接受和拒绝；
 - 文件冲突检测。
 
-### Phase 4：PowerShell 和 Windows 沙箱
+### Phase 5：PowerShell 和 Windows 沙箱
 
 置信度：90/100，需安全原型通过后确认
 
@@ -292,7 +302,7 @@ Windows Native Brokers
 - 路径、网络和凭据边界；
 - 红队和逃逸测试。
 
-### Phase 5：AI IDE 交互
+### Phase 6：AI IDE 交互
 
 置信度：94/100
 
@@ -304,7 +314,7 @@ Windows Native Brokers
 - 会话恢复；
 - 事件溯源 UI。
 
-### Phase 6：低延迟补全
+### Phase 7：低延迟补全
 
 置信度：91/100
 
@@ -315,7 +325,7 @@ Windows Native Brokers
 - 性能基准；
 - 模型能力探测。
 
-### Phase 7：子 Agent
+### Phase 8：子 Agent
 
 置信度：92/100
 
@@ -324,7 +334,7 @@ Windows Native Brokers
 - 预算和深度限制；
 - Patch 合并和测试。
 
-### Phase 8：网络、搜索和浏览器
+### Phase 9：网络、搜索和浏览器
 
 置信度：91/100
 
@@ -334,7 +344,7 @@ Windows Native Brokers
 - Playwright Chromium；
 - DOM、截图、下载和动作验证。
 
-### Phase 9：认证应用 Computer Use
+### Phase 10：认证应用 Computer Use
 
 置信度：90/100
 
@@ -344,7 +354,7 @@ Windows Native Brokers
 - 动作后验证；
 - 未认证应用拒绝交互。
 
-### Phase 10：Tool/Skill 自进化
+### Phase 11：Tool/Skill 自进化
 
 置信度：低风险 Tool 91~95，高权限 Tool/Skill 不自动晋级
 
@@ -356,7 +366,7 @@ Windows Native Brokers
 - Signed Whitelist；
 - 停用与回滚机制。
 
-### Phase 11：发布和本地化
+### Phase 12：发布和本地化
 
 置信度：92/100
 

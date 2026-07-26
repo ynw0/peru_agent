@@ -40,3 +40,13 @@
 - 跨进程、网络、文件和插件边界的数据必须运行时校验，禁止仅用 TypeScript 类型断言信任外部输入。
 - 异步请求的成功、失败、超时、中止和关闭路径必须释放相同的监听器、计时器和 Pending 状态。
 - Code OSS Overlay 使用的内部模块、Codicon、Registry 和 ViewPane API 必须针对固定上游版本执行源码契约检查，不能根据其他版本推断兼容。
+
+## Agent Runtime 规则
+
+- Tool 必须先完成 `validate` 和 `inspect`，并在权限判断前发布受影响文件。
+- 会触发外部即时响应的事件必须先登记内部 Pending 状态，再发布事件。
+- EventJournal 的 sequence 分配和文件追加必须串行化，禁止并发抢号。
+- 进程恢复时，无法验证仍有执行资源的 `running/awaitingPermission` 会话必须标记失败。
+- 模型流必须提供明确 `finish_reason` 和 Token 用量；缺失时停止运行，不猜测和估算。
+- ToolCall 参数必须是可解析 JSON，并继续经过 Tool 自身运行时校验。
+- 用户中止必须同时终止模型请求、权限等待和当前 Tool 执行。

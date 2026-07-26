@@ -3,40 +3,35 @@
 ## 当前阶段
 
 - Phase 0：完成；
-- Phase 1：产品身份、Typed IPC 与 Workbench 容器设计完成；
-- Code OSS 真实接入：源码导入、Overlay 应用和源码契约验证完成；
-- Code OSS 完整编译和桌面启动：未完成，缺少上游锁定依赖和匹配工具链；
-- 下一开发阶段：自研 Agent Core。
+- Phase 1：独立产品身份、Typed IPC 和 Workbench 容器设计完成；
+- Phase 2：真实 Code OSS 1.74.0 源码导入、Overlay 应用和 API 契约验证完成；
+- Phase 3：自研 Agent Core 完成；
+- 下一开发阶段：Phase 4 工作区工具、Checkpoint 与 Diff。
 
-## Code OSS 基线
+## Phase 3 已完成
 
-- 版本：`1.74.0`；
-- 来源：用户上传固定归档；
-- SHA-256：`debf828bfd82cb4c167757aaa03ef1663ea5999e110f965ec2ae38d8bb884065`；
-- 许可：MIT；
-- 上游要求：Node.js `16.14`。
-
-## 已执行
-
-- 归档和关键文件指纹校验；
-- 独立产品身份 Overlay；
-- Workbench Desktop Import；
-- Agent、Tasks、Permissions、Browser 原生容器；
-- 四个原生占位 ViewPane；
-- Overlay TypeScript 检查；
-- Code OSS 内部 API 契约检查；
-- Overlay 应用结果检查；
-- Phase 0~2 项目门禁。
+- AgentSession、AgentRuntime 和 AgentLoop；
+- OpenAI Chat Completions SSE Provider；
+- ToolCall 增量拼装；
+- Tool Registry 与 Tool Result 回灌；
+- 权限等待与 IPC 响应；
+- EventJournal 与 SessionStore；
+- 最大轮次、ToolCall 和 Token 预算；
+- 用户取消与中断恢复；
+- Workbench 事件投影。
 
 ## 验证结果
 
 ```text
-npm run verify                  → 22 passed
-npm run code-oss:check-overlay  → 通过
-npm run code-oss:verify-applied → 通过
+npm run audit → 通过
+npm run check → 通过
+npm test      → 34 passed
+npm run build → 通过
+npm run smoke → Phase 0~3 全部通过
 ```
 
-## 未通过门禁
+## 未通过或未执行门禁
 
-Code OSS 原始 `npm run compile` 已真实执行，因 `node_modules/gulp/bin/gulp.js` 不存在而失败。
-当前状态不能标记为“桌面 IDE 已编译或启动”。
+- 未对真实 OpenAI 兼容模型服务执行联网调用；当前只完成协议级模拟测试；
+- Code OSS 完整编译和桌面启动仍未完成，上传源码缺少上游锁定依赖和匹配 Node.js 16.14；
+- 工作区写入、PowerShell 和 Computer Use 尚未接入，因此不存在把它们标记为可用的情况。

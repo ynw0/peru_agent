@@ -1,26 +1,32 @@
 # Independent AI IDE
 
-完全自研 Agent Runtime、基于 Code OSS 的独立 AI IDE。
-Claude Code 源码仅作为只读架构参考，不参与产品构建。
+完全自研 Agent Runtime、基于 Code OSS 的独立 AI IDE。Claude Code 源码仅作为只读架构参考，不参与产品构建。
 
-## 当前状态
+## 当前完成状态
 
-已完成：
+- Phase 0：安全规则、协议和 TypeScript strict 基线；
+- Phase 1：独立产品身份、Typed IPC 和 Workbench 容器；
+- Phase 2：Code OSS 1.74.0 真实源码 Overlay 接入；
+- Phase 3：自研 Agent Core、OpenAI 兼容流协议和 Tool 循环。
 
-- Agent、权限、网络、补全、子 Agent、Computer Use 和自进化基础协议；
-- Typed IPC 请求、响应、事件、超时、中止和运行时校验；
-- Code OSS `1.74.0` 固定归档校验；
-- 独立产品身份 Overlay；
-- Agent、Tasks、Permissions、Browser 原生 Workbench 容器和占位视图；
-- Overlay TypeScript 检查、上游 API 契约检查和应用结果验证。
+Agent Core 已支持：
 
-未完成：
+- 会话、消息和事件持久化；
+- 模型流式文本；
+- ToolCall 增量拼装；
+- Tool Registry、权限询问和 Tool Result 回灌；
+- 最大轮次、ToolCall 和 Token 预算；
+- 用户取消；
+- 中断会话恢复；
+- Typed IPC 创建、启动、中止和读取会话。
+
+## 尚未完成
 
 - Code OSS 完整依赖安装、编译和桌面启动；
-- 自研 Agent Core；
-- Windows Sandbox Broker；
-- PowerShell AST Broker；
-- 真实 Browser Runtime 和 Completion Runtime。
+- Read、Write、Edit、Diff、Git 和 LSP 工具；
+- Windows Sandbox Broker 与 PowerShell AST Broker；
+- 真实 Browser Runtime、Computer Use 和 Completion Runtime；
+- 对真实 LM Studio、vLLM 或云端模型服务的联网集成测试。
 
 ## 核心项目门禁
 
@@ -32,26 +38,14 @@ npm run build
 npm run smoke
 ```
 
-## 导入并应用固定 Code OSS
+## Code OSS 基线
 
-```powershell
-npm run code-oss:import -- C:\path\to\code-main.zip
-npm run code-oss:apply-overlay
-npm run code-oss:verify-applied
-```
-
-归档哈希、版本、许可证、关键文件或 Overlay 锚点任一不匹配都会失败。
-不会切换版本、镜像或未声明源码。
-
-## Code OSS 完整构建
-
-上传的 Code OSS 1.74.0 使用 `.nvmrc` 中的 Node.js `16.14`，并需要按其锁文件安装完整依赖。
-在依赖完成前，不能把 Overlay 源码验证等同于桌面 IDE 编译成功。
+固定为用户提供的 Code OSS `1.74.0` 归档。归档哈希、版本、许可证、关键文件或 Overlay 锚点任一不匹配都会失败。
 
 ## 重要文档
 
 - `FINAL_PLAN.md`：总体计划；
 - `PROJECT_RULES.md`：强制开发和安全规则；
-- `PHASE2_REPORT.md`：真实 Code OSS 接入报告；
-- `docs/architecture/code-oss-workbench-overlay.md`：Workbench 接入架构；
-- `docs/lessons/2026-07-26-code-oss-versioned-api-contract.md`：版本 API 经验。
+- `PHASE3_REPORT.md`：Agent Core 执行报告；
+- `docs/architecture/agent-core.md`：Agent Core 架构；
+- `docs/lessons/2026-07-26-agent-runtime-ordering-and-recovery.md`：本阶段根因经验。

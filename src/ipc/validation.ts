@@ -32,7 +32,6 @@ function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): b
   return Object.keys(value).every(key => allowedKeys.has(key));
 }
 
-// 每个请求方法都执行独立参数校验，TypeScript 类型不能代替进程边界检查。
 export function isRequestParams(method: IpcRequestMethod, value: unknown): boolean {
   if (!isRecord(value)) {
     return false;
@@ -59,6 +58,14 @@ export function isRequestParams(method: IpcRequestMethod, value: unknown): boole
     case "session.create":
       return hasOnlyKeys(value, ["workspaceId"])
         && isNonEmptyString(value.workspaceId);
+    case "session.start":
+      return hasOnlyKeys(value, ["sessionId", "input"])
+        && isNonEmptyString(value.sessionId)
+        && isNonEmptyString(value.input);
+    case "session.abort":
+    case "session.get":
+      return hasOnlyKeys(value, ["sessionId"])
+        && isNonEmptyString(value.sessionId);
     case "permission.resolve":
       return hasOnlyKeys(value, ["requestId", "decision"])
         && isNonEmptyString(value.requestId)
@@ -68,54 +75,63 @@ export function isRequestParams(method: IpcRequestMethod, value: unknown): boole
   }
 }
 
-function isWorkbenchSnapshot(value: unknown): boolean {
-  if (!isRecord(value)
-    || !isStringArray(value.affectedFiles)
-    || !Array.isArray(value.pendingPermissions)
-    || !Array.isArray(value.tools)
-    || typeof value.completed !== "boolean") {
-    return false;
-  }
-
-  if (value.activeSessionId !== undefined && !isNonEmptyString(value.activeSessionId)) {
-    return false;
-  }
-  if (value.lastPlanConfidence !== undefined
-    && (typeof value.lastPlanConfidence !== "number"
-      || value.lastPlanConfidence < 0
-      || value.lastPlanConfidence > 100)) {
-    return false;
-  }
-
-  return value.pendingPermissions.every(permission =>
-    isRecord(permission)
-      && isNonEmptyString(permission.requestId)
-      && isStringArray(permission.capabilities),
-  ) && value.tools.every(tool =>
-    isRecord(tool)
-      && isNonEmptyString(tool.toolName)
-      && (tool.state === "requested" || tool.state === "completed" || tool.state === "failed"),
-  );
-}
-
-// Client 和 Server 都使用同一结果校验，防止一侧返回错误结构。
 export function isResponseResult(method: IpcRequestMethod, value: unknown): boolean {
-  if (!isRecord(value)) {
-    return false;
-  }
-
   switch (method) {
     case "runtime.initialize":
-      return isNonEmptyString(value.runtimeId)
+      return isRecord(value)
+        && isNonEmptyString(value.runtimeId)
         && value.protocolVersion === IPC_PROTOCOL_VERSION
         && isStringArray(value.enabledCapabilities);
     case "session.create":
-      return isNonEmptyString(value.sessionId);
+      return isRecord(value) && isNonEmptyString(value.sessionId);
+    case "session.start":
+      return isRecord(value) && isNonEmptyString(value.runId);
+    case "session.abort":
+      return isRecord(value) && typeof value.aborted === "boolean";
+    case "session.get":
+      return isAgentSessionSnapshot(value);
     case "permission.resolve":
-      return value.accepted === true;
+      return isRecord(value) && typeof value.accepted === "boolean";
     case "workbench.getSnapshot":
       return isWorkbenchSnapshot(value);
   }
+}
+
+function isAgentSessionSnapshot(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return isNonEmptyString(value.id)
+    && isNonEmptyString(value.workspaceId)
+    && (value.permissionMode === "default"
+      || value.permissionMode === "autoReview"
+      || value.permissionMode === "fullAccess")
+    && (value.status === "idle"
+      || value.status === "running"
+      || value.status === "awaitingPermission"
+      || value.status === "completed"
+      || value.status === "failed"
+      || value.status === "aborted")
+    && Array.isArray(value.messages)
+    && isNonEmptyString(value.createdAt)
+    && isNonEmptyString(value.updatedAt)
+    && isRecord(value.usage)
+    && Number.isInteger(value.usage.inputTokens)
+    && Number(value.usage.inputTokens) >= 0
+    && Number.isInteger(value.usage.outputTokens)
+    && Number(value.usage.outputTokens) >= 0;
+}
+
+function isWorkbenchSnapshot(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (value.activeSessionId === undefined || typeof value.activeSessionId === "string")
+    && (value.lastPlanConfidence === undefined || typeof value.lastPlanConfidence === "number")
+    && isStringArray(value.affectedFiles)
+    && Array.isArray(value.pendingPermissions)
+    && Array.isArray(value.tools)
+    && typeof value.completed === "boolean";
 }
 
 function isAgentEvent(value: unknown): boolean {
@@ -125,22 +141,44 @@ function isAgentEvent(value: unknown): boolean {
 
   switch (value.type) {
     case "session.created":
+      return value.workspaceId === undefined || typeof value.workspaceId === "string";
+    case "session.started":
+      return isNonEmptyString(value.runId);
     case "session.completed":
+    case "session.aborted":
       return true;
+    case "session.failed":
+      return isNonEmptyString(value.code) && isNonEmptyString(value.message);
     case "plan.created":
       return typeof value.confidence === "number"
         && value.confidence >= 0
         && value.confidence <= 100
         && isStringArray(value.affectedFiles);
+    case "model.started":
+      return Number.isInteger(value.turn) && Number(value.turn) > 0;
+    case "assistant.delta":
+      return typeof value.delta === "string";
+    case "assistant.completed":
+      return isNonEmptyString(value.messageId);
     case "tool.requested":
       return isNonEmptyString(value.toolName) && isStringArray(value.capabilities);
+    case "tool.inspected":
+      return isNonEmptyString(value.toolName) && isStringArray(value.affectedFiles);
+    case "tool.started":
+      return isNonEmptyString(value.toolName) && isNonEmptyString(value.toolCallId);
+    case "tool.progress":
+      return isNonEmptyString(value.toolName)
+        && isNonEmptyString(value.toolCallId)
+        && isNonEmptyString(value.message);
     case "permission.requested":
       return isNonEmptyString(value.requestId) && isStringArray(value.capabilities);
     case "permission.resolved":
       return isNonEmptyString(value.requestId)
         && (value.decision === "allow" || value.decision === "deny");
     case "tool.completed":
-      return isNonEmptyString(value.toolName) && typeof value.success === "boolean";
+      return isNonEmptyString(value.toolName)
+        && typeof value.success === "boolean"
+        && (value.toolCallId === undefined || typeof value.toolCallId === "string");
     default:
       return false;
   }
@@ -162,6 +200,9 @@ function isEventPayload(method: IpcEventMethod, value: unknown): boolean {
 const REQUEST_METHODS: ReadonlySet<string> = new Set<IpcRequestMethod>([
   "runtime.initialize",
   "session.create",
+  "session.start",
+  "session.abort",
+  "session.get",
   "permission.resolve",
   "workbench.getSnapshot",
 ]);
@@ -172,7 +213,6 @@ const EVENT_METHODS: ReadonlySet<string> = new Set<IpcEventMethod>([
   "runtime.health.changed",
 ]);
 
-// IPC 边界收到的是不可信数据，必须校验消息类型和对应方法的数据结构。
 export function isIpcMessage(value: unknown): value is IpcMessage {
   if (!isRecord(value) || typeof value.kind !== "string") {
     return false;

@@ -1,10 +1,10 @@
-// 权限模式只有三种，UI 和运行时必须使用同一组枚举。
+// 权限模式只有三种，IDE、Agent Runtime 和权限引擎必须使用同一组枚举。
 export type PermissionMode = "default" | "autoReview" | "fullAccess";
 
-// 网络模式不会自动切换；用户必须明确选择。
+// 网络模式不会自动切换；用户必须明确选择需要的运行环境。
 export type NetworkMode = "offline" | "lan" | "internet";
 
-// Tool 风险等级用于决定是否允许自动晋级。
+// Tool 风险等级用于权限审核和自生成 Tool 的晋级判断。
 export type ToolRiskLevel =
   | "pure-compute"
   | "workspace-read"
@@ -33,12 +33,21 @@ export type Capability =
   | "tool.install"
   | "skill.install";
 
-// Agent 运行过程通过事件传给 IDE，UI 不是事实来源。
+// Agent 运行过程通过不可变事件传给 IDE；UI 只投影事件，不保存另一份事实状态。
 export type AgentEvent =
-  | { type: "session.created"; sessionId: string }
+  | { type: "session.created"; sessionId: string; workspaceId?: string }
+  | { type: "session.started"; sessionId: string; runId: string }
   | { type: "plan.created"; sessionId: string; confidence: number; affectedFiles: string[] }
+  | { type: "model.started"; sessionId: string; turn: number }
+  | { type: "assistant.delta"; sessionId: string; delta: string }
+  | { type: "assistant.completed"; sessionId: string; messageId: string }
   | { type: "tool.requested"; sessionId: string; toolName: string; capabilities: Capability[] }
+  | { type: "tool.inspected"; sessionId: string; toolName: string; affectedFiles: string[] }
+  | { type: "tool.started"; sessionId: string; toolName: string; toolCallId: string }
+  | { type: "tool.progress"; sessionId: string; toolName: string; toolCallId: string; message: string }
   | { type: "permission.requested"; sessionId: string; requestId: string; capabilities: Capability[] }
   | { type: "permission.resolved"; sessionId: string; requestId: string; decision: "allow" | "deny" }
-  | { type: "tool.completed"; sessionId: string; toolName: string; success: boolean }
-  | { type: "session.completed"; sessionId: string };
+  | { type: "tool.completed"; sessionId: string; toolName: string; success: boolean; toolCallId?: string }
+  | { type: "session.completed"; sessionId: string }
+  | { type: "session.failed"; sessionId: string; code: string; message: string }
+  | { type: "session.aborted"; sessionId: string };
