@@ -6,6 +6,9 @@ import type {
 } from "../agent-protocol.js";
 import type { AgentSessionSnapshot } from "../agent/types.js";
 import type { WorkbenchSnapshot } from "../workbench/workbench-state.js";
+import type { CheckpointRecord } from "../checkpoint/checkpoint-manager.js";
+import type { DiffProposal } from "../diff/diff-manager.js";
+import type { WorkspaceFileSnapshot } from "../workspace/types.js";
 
 // IPC 协议版本必须显式匹配；版本不一致时拒绝连接，不做隐式兼容。
 export const IPC_PROTOCOL_VERSION = 1 as const;
@@ -62,6 +65,33 @@ export interface ResolvePermissionResult {
   readonly accepted: boolean;
 }
 
+
+export interface RegisterWorkspaceRequest {
+  readonly workspaceId: string;
+  readonly rootPath: string;
+}
+
+export interface ReadWorkspaceFileRequest {
+  readonly workspaceId: string;
+  readonly path: string;
+}
+
+export interface ListDiffsRequest {
+  readonly workspaceId?: string;
+}
+
+export interface ProposalRequest {
+  readonly proposalId: string;
+}
+
+export interface ListCheckpointsRequest {
+  readonly workspaceId?: string;
+}
+
+export interface RestoreCheckpointRequest {
+  readonly checkpointId: string;
+}
+
 // 请求方法表同时定义参数和返回值，是 Typed IPC 的唯一事实来源。
 export interface IpcRequestMap {
   readonly "runtime.initialize": {
@@ -87,6 +117,38 @@ export interface IpcRequestMap {
   readonly "permission.resolve": {
     readonly params: ResolvePermissionRequest;
     readonly result: ResolvePermissionResult;
+  };
+  readonly "workspace.register": {
+    readonly params: RegisterWorkspaceRequest;
+    readonly result: { readonly registered: true };
+  };
+  readonly "workspace.read": {
+    readonly params: ReadWorkspaceFileRequest;
+    readonly result: WorkspaceFileSnapshot;
+  };
+  readonly "diff.list": {
+    readonly params: ListDiffsRequest;
+    readonly result: { readonly proposals: readonly DiffProposal[] };
+  };
+  readonly "diff.get": {
+    readonly params: ProposalRequest;
+    readonly result: DiffProposal;
+  };
+  readonly "diff.accept": {
+    readonly params: ProposalRequest;
+    readonly result: DiffProposal;
+  };
+  readonly "diff.reject": {
+    readonly params: ProposalRequest;
+    readonly result: DiffProposal;
+  };
+  readonly "checkpoint.list": {
+    readonly params: ListCheckpointsRequest;
+    readonly result: { readonly checkpoints: readonly CheckpointRecord[] };
+  };
+  readonly "checkpoint.restore": {
+    readonly params: RestoreCheckpointRequest;
+    readonly result: CheckpointRecord;
   };
   readonly "workbench.getSnapshot": {
     readonly params: Record<string, never>;

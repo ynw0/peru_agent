@@ -7,7 +7,8 @@
 - Phase 0：安全规则、协议和 TypeScript strict 基线；
 - Phase 1：独立产品身份、Typed IPC 和 Workbench 容器；
 - Phase 2：Code OSS 1.74.0 真实源码 Overlay 接入；
-- Phase 3：自研 Agent Core、OpenAI 兼容流协议和 Tool 循环。
+- Phase 3：自研 Agent Core、OpenAI 兼容流协议和 Tool 循环；
+- Phase 4：Workspace、Diff、Checkpoint 和安全文件修改链。
 
 Agent Core 已支持：
 
@@ -18,12 +19,14 @@ Agent Core 已支持：
 - 最大轮次、ToolCall 和 Token 预算；
 - 用户取消；
 - 中断会话恢复；
-- Typed IPC 创建、启动、中止和读取会话。
+- Typed IPC 创建、启动、中止和读取会话；
+- Read、Write、Edit、ApplyPatch、Glob 和 Grep；
+- Diff Proposal 接受/拒绝、SHA-256 冲突检测和 Checkpoint 恢复。
 
 ## 尚未完成
 
 - Code OSS 完整依赖安装、编译和桌面启动；
-- Read、Write、Edit、Diff、Git 和 LSP 工具；
+- Git、LSP 和 Diagnostics 工具；
 - Windows Sandbox Broker 与 PowerShell AST Broker；
 - 真实 Browser Runtime、Computer Use 和 Completion Runtime；
 - 对真实 LM Studio、vLLM 或云端模型服务的联网集成测试。
@@ -46,6 +49,7 @@ npm run smoke
 
 - `FINAL_PLAN.md`：总体计划；
 - `PROJECT_RULES.md`：强制开发和安全规则；
-- `PHASE3_REPORT.md`：Agent Core 执行报告；
+- `PHASE4_REPORT.md`：Workspace、Diff 与 Checkpoint 执行报告；
 - `docs/architecture/agent-core.md`：Agent Core 架构；
+- `docs/architecture/workspace-diff-checkpoint.md`：安全文件修改链；
 - `docs/lessons/2026-07-26-agent-runtime-ordering-and-recovery.md`：本阶段根因经验。

@@ -21,7 +21,7 @@ export function decidePermission(
   }
 
   if (mode === "autoReview") {
-    return capability === "workspace.read" || capability === "computer.inspect"
+    return capability === "workspace.read" || capability === "workspace.propose" || capability === "computer.inspect"
       ? "allow"
       : "deny";
   }
@@ -30,7 +30,7 @@ export function decidePermission(
     return "deny";
   }
 
-  return capability === "workspace.read" || capability === "computer.inspect"
+  return capability === "workspace.read" || capability === "workspace.propose" || capability === "computer.inspect"
     ? "allow"
     : "ask";
 }

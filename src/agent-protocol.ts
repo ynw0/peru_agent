@@ -19,6 +19,7 @@ export type ToolRiskLevel =
 export type Capability =
   | "workspace.read"
   | "workspace.write"
+  | "workspace.propose"
   | "workspace.delete"
   | "process.execute"
   | "process.background"
@@ -48,6 +49,10 @@ export type AgentEvent =
   | { type: "permission.requested"; sessionId: string; requestId: string; capabilities: Capability[] }
   | { type: "permission.resolved"; sessionId: string; requestId: string; decision: "allow" | "deny" }
   | { type: "tool.completed"; sessionId: string; toolName: string; success: boolean; toolCallId?: string }
+  | { type: "diff.proposed"; sessionId: string; proposalId: string; affectedFiles: string[] }
+  | { type: "diff.resolved"; sessionId: string; proposalId: string; decision: "accepted" | "rejected" | "conflict"; checkpointId?: string }
+  | { type: "checkpoint.created"; sessionId: string; checkpointId: string; proposalId: string }
+  | { type: "checkpoint.restored"; sessionId: string; checkpointId: string; affectedFiles: string[] }
   | { type: "session.completed"; sessionId: string }
   | { type: "session.failed"; sessionId: string; code: string; message: string }
   | { type: "session.aborted"; sessionId: string };

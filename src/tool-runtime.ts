@@ -20,6 +20,7 @@ export interface ToolInspection {
 export interface ToolExecutionContext {
   readonly sessionId: string;
   readonly workspaceId: string;
+  readonly toolCallId: string;
   readonly signal: AbortSignal;
   reportProgress(message: string): Promise<void>;
 }

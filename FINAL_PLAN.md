@@ -282,15 +282,19 @@ Windows Native Brokers
 - 中断、恢复、最大轮次和预算；
 - OpenAI 兼容 Model Gateway。
 
-### Phase 4：工作区工具和 Diff
+### Phase 4：工作区工具、Diff 与 Checkpoint
 
-置信度：91/100
+置信度：93/100
 
 - Read、Write、Edit、ApplyPatch、Glob、Grep；
-- Git、LSP、Diagnostics；
+- 模型只生成 Diff Proposal，不直接写盘；
 - Checkpoint；
 - Diff 接受和拒绝；
-- 文件冲突检测。
+- SHA-256 文件冲突检测；
+- 多文件事务和回滚；
+- Diff/Checkpoint 持久化；
+- Git 进程工具在 Windows Sandbox 完成后实施；
+- LSP 与 Diagnostics 在真实 Code OSS Runtime 接通后实施。
 
 ### Phase 5：PowerShell 和 Windows 沙箱
 

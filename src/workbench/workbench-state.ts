@@ -10,6 +10,19 @@ export interface ToolActivityView {
   readonly state: "requested" | "running" | "completed" | "failed";
 }
 
+export interface DiffProposalView {
+  readonly proposalId: string;
+  readonly status: "proposed" | "accepted" | "rejected" | "conflict";
+  readonly affectedFiles: readonly string[];
+  readonly checkpointId?: string;
+}
+
+export interface CheckpointView {
+  readonly checkpointId: string;
+  readonly proposalId?: string;
+  readonly restored: boolean;
+}
+
 // WorkbenchSnapshot 是 UI 可恢复状态；UI 组件不得各自维护另一份事实来源。
 export interface WorkbenchSnapshot {
   readonly activeSessionId?: string;
@@ -18,6 +31,8 @@ export interface WorkbenchSnapshot {
   readonly affectedFiles: readonly string[];
   readonly pendingPermissions: readonly PendingPermissionView[];
   readonly tools: readonly ToolActivityView[];
+  readonly diffProposals: readonly DiffProposalView[];
+  readonly checkpoints: readonly CheckpointView[];
   readonly assistantText: string;
   readonly completed: boolean;
   readonly failed?: { readonly code: string; readonly message: string };
@@ -28,6 +43,8 @@ export const EMPTY_WORKBENCH_SNAPSHOT: WorkbenchSnapshot = {
   affectedFiles: [],
   pendingPermissions: [],
   tools: [],
+  diffProposals: [],
+  checkpoints: [],
   assistantText: "",
   completed: false,
   aborted: false,
@@ -45,6 +62,8 @@ export function projectWorkbenchSnapshot(
         affectedFiles: [],
         pendingPermissions: [],
         tools: [],
+        diffProposals: [],
+        checkpoints: [],
         assistantText: "",
         completed: false,
         aborted: false,
@@ -111,6 +130,50 @@ export function projectWorkbenchSnapshot(
           event.toolName,
           event.success ? "completed" : "failed",
         ),
+      };
+    case "diff.proposed":
+      return {
+        ...current,
+        affectedFiles: [...new Set([...current.affectedFiles, ...event.affectedFiles])],
+        diffProposals: [
+          ...current.diffProposals,
+          {
+            proposalId: event.proposalId,
+            status: "proposed",
+            affectedFiles: [...event.affectedFiles],
+          },
+        ],
+      };
+    case "diff.resolved":
+      return {
+        ...current,
+        diffProposals: current.diffProposals.map(proposal =>
+          proposal.proposalId === event.proposalId
+            ? {
+              ...proposal,
+              status: event.decision === "accepted"
+                ? "accepted"
+                : event.decision === "rejected" ? "rejected" : "conflict",
+              ...(event.checkpointId === undefined ? {} : { checkpointId: event.checkpointId }),
+            }
+            : proposal),
+      };
+    case "checkpoint.created":
+      return {
+        ...current,
+        checkpoints: [
+          ...current.checkpoints,
+          { checkpointId: event.checkpointId, proposalId: event.proposalId, restored: false },
+        ],
+      };
+    case "checkpoint.restored":
+      return {
+        ...current,
+        affectedFiles: [...new Set([...current.affectedFiles, ...event.affectedFiles])],
+        checkpoints: current.checkpoints.map(checkpoint =>
+          checkpoint.checkpointId === event.checkpointId
+            ? { ...checkpoint, restored: true }
+            : checkpoint),
       };
     case "session.completed":
       return { ...withoutActiveRun(current), completed: true };

@@ -50,3 +50,15 @@
 - 模型流必须提供明确 `finish_reason` 和 Token 用量；缺失时停止运行，不猜测和估算。
 - ToolCall 参数必须是可解析 JSON，并继续经过 Tool 自身运行时校验。
 - 用户中止必须同时终止模型请求、权限等待和当前 Tool 执行。
+
+## Workspace 与 Diff 规则
+
+- 模型文件修改工具只能生成 Diff Proposal，禁止直接写入工作区。
+- `workspace.propose` 与 `workspace.write` 必须是两个独立能力。
+- Diff 接受前必须一次性校验所有目标文件哈希；任一冲突则零写入。
+- 文件写入必须在临时文件写完后、原子替换前再次校验目标哈希。
+- 同一工作区内的接受、拒绝、恢复和文件写入必须串行化。
+- 多文件写入和 Checkpoint 恢复必须保存补偿数据并提供回滚测试。
+- 工作区路径必须拒绝绝对路径、盘符、UNC、`..` 和符号链接。
+- Diff、Checkpoint 和其他磁盘协议文件读取后必须运行时校验。
+- Git 和其他进程型工具在 Windows Sandbox Broker 完成前禁止启用。

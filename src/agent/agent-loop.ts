@@ -260,6 +260,7 @@ export class AgentLoop {
       const context: ToolExecutionContext = {
         sessionId: session.id,
         workspaceId: session.workspaceId,
+        toolCallId: toolCall.id,
         signal,
         reportProgress: async message => {
           if (message.trim() === "") {
