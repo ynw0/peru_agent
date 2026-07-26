@@ -1,6 +1,6 @@
 import type { AgentEvent, PermissionMode } from "../agent-protocol.js";
 import { AgentError } from "../agent/errors.js";
-import type { EventJournal } from "../agent/event-journal.js";
+import type { EventJournal, JournalEntry } from "../agent/event-journal.js";
 import type { IdGenerator } from "../agent/id-generator.js";
 import { AgentLoop, type AgentLoopOptions } from "../agent/agent-loop.js";
 import { PermissionCoordinator } from "../agent/permission-coordinator.js";
@@ -117,6 +117,30 @@ export class AgentRuntime {
 
   public resolvePermission(requestId: string, decision: "allow" | "deny"): boolean {
     return this.dependencies.permissions.resolve(requestId, decision);
+  }
+
+
+  public async listSessions(workspaceId?: string): Promise<readonly AgentSessionSnapshot[]> {
+    const snapshots = await this.dependencies.sessions.list();
+    return snapshots
+      .filter(snapshot => workspaceId === undefined || snapshot.workspaceId === workspaceId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
+
+  public listEvents(sessionId: string): Promise<readonly JournalEntry[]> {
+    return this.dependencies.journal.list(sessionId);
+  }
+
+  // Retry 创建新会话，保留失败会话作为审计记录，避免重复修改旧会话历史。
+  public async retrySession(sessionId: string): Promise<{ sessionId: string; runId: string }> {
+    const source = await this.requireSession(sessionId);
+    const lastUserMessage = [...source.getMessages()].reverse().find(message => message.role === "user");
+    if (lastUserMessage === undefined) {
+      throw new AgentError("INTERNAL_ERROR", `会话没有可重试的用户消息：${sessionId}`);
+    }
+    const created = await this.createSession(source.workspaceId, source.permissionMode);
+    const started = await this.startSession(created.id, lastUserMessage.content);
+    return { sessionId: created.id, runId: started.runId };
   }
 
   public async getSession(sessionId: string): Promise<AgentSessionSnapshot> {

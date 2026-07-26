@@ -21,7 +21,7 @@ import {
 	INDEPENDENT_AI_IDE_CONTAINER_IDS,
 	INDEPENDENT_AI_IDE_VIEW_IDS,
 } from 'vs/workbench/contrib/independentAiIde/common/independentAiIde';
-import { IndependentAiIdePlaceholderView } from 'vs/workbench/contrib/independentAiIde/browser/independentAiIdeView';
+import { IndependentAiIdeView, IndependentAiIdeViewKind } from 'vs/workbench/contrib/independentAiIde/browser/independentAiIdeView';
 
 const containersRegistry = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewContainersRegistry);
 const viewsRegistry = Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry);
@@ -80,12 +80,11 @@ const browserContainer = registerContainer(
 );
 
 // View 描述符是 Workbench 创建实际 ViewPane 实例的工厂配置。
-function registerPlaceholderView(
+function registerInteractiveView(
 	container: ViewContainer,
 	id: string,
 	name: string,
-	heading: string,
-	description: string,
+	kind: IndependentAiIdeViewKind,
 	icon: ThemeIcon,
 	commandId: string,
 	order: number,
@@ -97,7 +96,7 @@ function registerPlaceholderView(
 		canMoveView: true,
 		canToggleVisibility: false,
 		order,
-		ctorDescriptor: new SyncDescriptor(IndependentAiIdePlaceholderView, [heading, description]),
+		ctorDescriptor: new SyncDescriptor(IndependentAiIdeView, [kind]),
 		openCommandActionDescriptor: {
 			id: commandId,
 			title: name,
@@ -106,42 +105,38 @@ function registerPlaceholderView(
 	}], container);
 }
 
-registerPlaceholderView(
+registerInteractiveView(
 	agentContainer,
 	INDEPENDENT_AI_IDE_VIEW_IDS.chat,
 	localize('independentAiIde.chat', 'AI Agent'),
-	localize('independentAiIde.chatHeading', 'AI Agent'),
-	localize('independentAiIde.chatDescription', 'Agent Runtime will connect through the typed IPC boundary in the next phase.'),
+	'agent',
 	agentIcon,
 	'workbench.view.independentAiIde.agent',
 	10,
 );
-registerPlaceholderView(
+registerInteractiveView(
 	tasksContainer,
 	INDEPENDENT_AI_IDE_VIEW_IDS.taskList,
 	localize('independentAiIde.taskList', 'Tasks'),
-	localize('independentAiIde.taskHeading', 'Agent Tasks'),
-	localize('independentAiIde.taskDescription', 'Foreground, background, and sub-agent task states will appear here.'),
+	'tasks',
 	tasksIcon,
 	'workbench.view.independentAiIde.tasks',
 	20,
 );
-registerPlaceholderView(
+registerInteractiveView(
 	permissionsContainer,
 	INDEPENDENT_AI_IDE_VIEW_IDS.permissionQueue,
 	localize('independentAiIde.permissionQueue', 'Permissions'),
-	localize('independentAiIde.permissionHeading', 'Permission Queue'),
-	localize('independentAiIde.permissionDescription', 'Pending file, process, network, browser, and Computer Use requests will require an explicit decision.'),
+	'permissions',
 	permissionsIcon,
 	'workbench.view.independentAiIde.permissions',
 	30,
 );
-registerPlaceholderView(
+registerInteractiveView(
 	browserContainer,
 	INDEPENDENT_AI_IDE_VIEW_IDS.browserSession,
 	localize('independentAiIde.browserSession', 'Browser'),
-	localize('independentAiIde.browserHeading', 'Controlled Browser'),
-	localize('independentAiIde.browserDescription', 'Only isolated browser sessions governed by the configured network policy will be shown here.'),
+	'browser',
 	browserIcon,
 	'workbench.view.independentAiIde.browser',
 	40,

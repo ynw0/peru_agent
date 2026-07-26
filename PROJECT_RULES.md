@@ -75,3 +75,15 @@
 - Phase 9 Egress Broker 完成前，沙箱进程不得获得 LAN 或互联网 Capability。
 - AppContainer ACL 清理只能删除 Broker 自己添加的精确 ACE，禁止恢复整份 ACL 快照覆盖外部修改。
 - Windows 原生 Broker 未在 Windows 11 x64 真机完成构建和红队测试前，产品构建不得启用 PowerShell Tool。
+
+## AI IDE 交互层规则
+
+- 所有流式更新实体必须在第一个 delta 前生成并发布稳定 ID。
+- Workbench 投影必须按 `sessionId` 隔离，后台会话事件不得覆盖当前会话状态。
+- 用于审计、排序和恢复的领域时间戳必须写入事件，禁止在重放时重新生成。
+- 高频流式事件只能执行 O(1) 本地投影，禁止每个 delta 请求完整事件时间线。
+- Workbench View 只能通过 Bridge 和 Typed IPC 发出命令，禁止直接访问文件系统、Shell、Tool 或 PermissionEngine 内部对象。
+- Workbench Bridge 未连接时必须明确禁用操作并显示原因，禁止创建本地替代执行路径。
+- 未知 Plan ID、ToolCall ID 或不合法状态转换必须明确失败，禁止静默创建或跳过。
+- Plan UI 只能提交批准或拒绝请求，不能直接修改 PlanRecord。
+- UI Snapshot 是 EventJournal 的投影，不是运行时事实来源；恢复必须从持久化会话和事件重建。

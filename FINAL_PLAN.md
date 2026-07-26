@@ -310,15 +310,19 @@ Windows Native Brokers
 
 ### Phase 6：AI IDE 交互
 
+状态：交互领域模型、Typed IPC Controller、事件重放和 Code OSS 原生 View Overlay 已完成；完整桌面编译、实际启动和生产 IPC Transport 待全局 Code OSS 门禁完成。
+
 置信度：94/100
 
-- Agent Chat；
-- Plan Review；
-- Tool 卡片；
-- 权限窗口；
-- Diff Review；
-- 会话恢复；
-- 事件溯源 UI。
+- [x] Agent Chat 状态、流式消息、Token 与发送/停止/重试；
+- [x] Plan Review 状态机与批准/拒绝；
+- [x] Tool 卡片、进度、风险、能力和影响范围；
+- [x] 权限窗口与允许/拒绝 Typed IPC；
+- [x] Diff Review、Checkpoint 和冲突状态交互；
+- [x] 会话列表、事件时间线、Retry 和事件重放恢复；
+- [x] Agent、Tasks、Permissions 原生 Code OSS ViewPane Overlay；
+- [ ] Code OSS 完整依赖安装、Electron Workbench 编译与桌面启动；
+- [ ] 主进程到独立 Agent Runtime 的生产 IPC Transport 安装。
 
 ### Phase 7：低延迟补全
 
@@ -449,20 +453,17 @@ Windows Native Brokers
 
 ## 16. 当前执行状态
 
-本计划生成时同步执行 Phase 0 基线：
-
-- [x] 创建全新 `ai-ide` 目录；
-- [x] 固化项目规则；
-- [x] 定义基础 TypeScript 协议；
-- [x] 建立高权限 Tool/Skill 禁止自动晋级策略；
-- [x] 建立 Computer Use 认证应用策略；
-- [x] 建立网络三模式策略；
-- [x] 建立编译和测试命令；
-- [x] 运行编译和测试；
-- [x] 导入并校验用户提供的 Code OSS 1.74.0 固定归档；
-- [x] 建立独立产品身份与 Overlay 清单；
-- [x] 建立 Agent、Task、Permission、Browser 容器骨架；
-- [x] 实现版本化 Typed IPC；
-- [x] 在真实 Code OSS 上应用产品 Overlay 并注册四个原生 Workbench 容器；
-- [ ] 安装 Code OSS 锁定依赖并完成 Workbench 编译与桌面启动；
-- [ ] 实现 Windows 原生 Sandbox Broker；
+- [x] Phase 0：独立仓库、项目规则、安全策略和 TypeScript 基线；
+- [x] Phase 1：独立产品身份、Typed IPC 和 Workbench 容器设计；
+- [x] Phase 2：Code OSS 1.74.0 固定归档导入、Overlay 应用和 API 契约校验；
+- [x] Phase 3：自研 AgentSession、AgentLoop、EventJournal、OpenAI 兼容流与 Tool 循环；
+- [x] Phase 4：Workspace 工具、Diff Proposal、Checkpoint、冲突检测和事务回滚；
+- [x] Phase 5：PowerShell AST、Broker 协议和 Windows 原生安全原型源码；
+- [x] Phase 6：Agent Chat、Plan、Tool、Permission、Diff、Checkpoint、Session 的交互领域模型、Typed IPC 与 Code OSS View Overlay；
+- [ ] 全局门禁：安装 Code OSS 锁定依赖并完成 Electron Workbench 编译与桌面启动；
+- [ ] 全局门禁：在 Windows 11 x64 编译并红队验证 Windows Sandbox Broker；
+- [ ] 全局门禁：安装主进程到独立 Agent Runtime 的生产 IPC Transport；
+- [ ] Phase 7：低延迟 FIM 代码补全；
+- [ ] Phase 8：子 Agent；
+- [ ] Phase 9：网络、搜索和浏览器；
+- [ ] Phase 10：认证应用 Computer Use、自进化、发布与强化。

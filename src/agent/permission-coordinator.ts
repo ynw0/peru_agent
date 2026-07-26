@@ -22,6 +22,7 @@ export class PermissionCoordinator {
 
   public async authorize(
     session: AgentSession,
+    toolCallId: string,
     manifest: ToolManifest,
     inspection: ToolInspection,
     emit: AgentEventEmitter,
@@ -51,7 +52,15 @@ export class PermissionCoordinator {
       return "allow";
     }
 
-    return this.waitForUserDecision(session, askedCapabilities, emit, signal);
+    return this.waitForUserDecision(
+      session,
+      toolCallId,
+      manifest,
+      inspection,
+      askedCapabilities,
+      emit,
+      signal,
+    );
   }
 
   public resolve(requestId: string, decision: "allow" | "deny"): boolean {
@@ -78,6 +87,9 @@ export class PermissionCoordinator {
 
   private async waitForUserDecision(
     session: AgentSession,
+    toolCallId: string,
+    manifest: ToolManifest,
+    inspection: ToolInspection,
     capabilities: readonly Capability[],
     emit: AgentEventEmitter,
     signal: AbortSignal,
@@ -108,7 +120,12 @@ export class PermissionCoordinator {
         type: "permission.requested",
         sessionId: session.id,
         requestId,
+        toolCallId,
+        toolName: manifest.name,
+        riskLevel: manifest.riskLevel,
         capabilities: [...capabilities],
+        affectedFiles: [...inspection.affectedFiles],
+        reason: inspection.reason ?? manifest.description ?? manifest.name,
       });
     } catch (error: unknown) {
       const pending = this.pending.get(requestId);

@@ -4,14 +4,16 @@ import type {
   NetworkMode,
   PermissionMode,
 } from "../agent-protocol.js";
+import type { JournalEntry } from "../agent/event-journal.js";
 import type { AgentSessionSnapshot } from "../agent/types.js";
 import type { WorkbenchSnapshot } from "../workbench/workbench-state.js";
 import type { CheckpointRecord } from "../checkpoint/checkpoint-manager.js";
 import type { DiffProposal } from "../diff/diff-manager.js";
+import type { PlanRecord } from "../plan/plan-manager.js";
 import type { WorkspaceFileSnapshot } from "../workspace/types.js";
 
 // IPC 协议版本必须显式匹配；版本不一致时拒绝连接，不做隐式兼容。
-export const IPC_PROTOCOL_VERSION = 1 as const;
+export const IPC_PROTOCOL_VERSION = 2 as const;
 
 export interface RuntimeInitializeRequest {
   readonly protocolVersion: typeof IPC_PROTOCOL_VERSION;
@@ -56,6 +58,18 @@ export interface GetSessionRequest {
   readonly sessionId: string;
 }
 
+export interface ListSessionsRequest {
+  readonly workspaceId?: string;
+}
+
+export interface ListSessionEventsRequest {
+  readonly sessionId: string;
+}
+
+export interface RetrySessionRequest {
+  readonly sessionId: string;
+}
+
 export interface ResolvePermissionRequest {
   readonly requestId: string;
   readonly decision: "allow" | "deny";
@@ -64,7 +78,6 @@ export interface ResolvePermissionRequest {
 export interface ResolvePermissionResult {
   readonly accepted: boolean;
 }
-
 
 export interface RegisterWorkspaceRequest {
   readonly workspaceId: string;
@@ -92,6 +105,23 @@ export interface RestoreCheckpointRequest {
   readonly checkpointId: string;
 }
 
+export interface ListPlansRequest {
+  readonly sessionId?: string;
+}
+
+export interface GetPlanRequest {
+  readonly planId: string;
+}
+
+export interface ResolvePlanRequest {
+  readonly planId: string;
+  readonly decision: "approved" | "rejected";
+}
+
+export interface GetWorkbenchSnapshotRequest {
+  readonly sessionId?: string;
+}
+
 // 请求方法表同时定义参数和返回值，是 Typed IPC 的唯一事实来源。
 export interface IpcRequestMap {
   readonly "runtime.initialize": {
@@ -113,6 +143,18 @@ export interface IpcRequestMap {
   readonly "session.get": {
     readonly params: GetSessionRequest;
     readonly result: AgentSessionSnapshot;
+  };
+  readonly "session.list": {
+    readonly params: ListSessionsRequest;
+    readonly result: { readonly sessions: readonly AgentSessionSnapshot[] };
+  };
+  readonly "session.events": {
+    readonly params: ListSessionEventsRequest;
+    readonly result: { readonly entries: readonly JournalEntry[] };
+  };
+  readonly "session.retry": {
+    readonly params: RetrySessionRequest;
+    readonly result: { readonly sessionId: string; readonly runId: string };
   };
   readonly "permission.resolve": {
     readonly params: ResolvePermissionRequest;
@@ -150,8 +192,20 @@ export interface IpcRequestMap {
     readonly params: RestoreCheckpointRequest;
     readonly result: CheckpointRecord;
   };
+  readonly "plan.list": {
+    readonly params: ListPlansRequest;
+    readonly result: { readonly plans: readonly PlanRecord[] };
+  };
+  readonly "plan.get": {
+    readonly params: GetPlanRequest;
+    readonly result: PlanRecord;
+  };
+  readonly "plan.resolve": {
+    readonly params: ResolvePlanRequest;
+    readonly result: PlanRecord;
+  };
   readonly "workbench.getSnapshot": {
-    readonly params: Record<string, never>;
+    readonly params: GetWorkbenchSnapshotRequest;
     readonly result: WorkbenchSnapshot;
   };
 }

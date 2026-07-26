@@ -25,6 +25,14 @@ export class AgentRuntimeIpcBridge {
       })),
       this.server.registerHandler("session.get", request =>
         this.runtime.getSession(request.sessionId)),
+      this.server.registerHandler("session.list", async request => ({
+        sessions: await this.runtime.listSessions(request.workspaceId),
+      })),
+      this.server.registerHandler("session.events", async request => ({
+        entries: await this.runtime.listEvents(request.sessionId),
+      })),
+      this.server.registerHandler("session.retry", request =>
+        this.runtime.retrySession(request.sessionId)),
       this.server.registerHandler("permission.resolve", request => ({
         accepted: this.runtime.resolvePermission(request.requestId, request.decision),
       })),

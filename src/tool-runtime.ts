@@ -20,6 +20,8 @@ export interface ToolInspection {
   readonly networkTargets?: readonly string[];
   readonly commands?: readonly string[];
   readonly sandboxRequired?: boolean;
+  // 人类可读原因会显示在权限中心，不能只展示抽象能力枚举。
+  readonly reason?: string;
 }
 
 export interface ToolInspectionContext {

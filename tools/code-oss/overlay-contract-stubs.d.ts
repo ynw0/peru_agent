@@ -86,6 +86,7 @@ declare module 'vs/workbench/browser/parts/views/viewPane' {
   export class ViewPane {
     constructor(options: IViewletViewOptions, ...services: unknown[]);
     protected renderBody(container: HTMLElement): void;
+    dispose(): void;
   }
 }
 

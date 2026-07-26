@@ -34,23 +34,125 @@ export type Capability =
   | "tool.install"
   | "skill.install";
 
+// Plan 状态由独立状态机维护，UI 只能通过 IPC 提交审核决定。
+export type PlanStatus =
+  | "reviewing"
+  | "approved"
+  | "rejected"
+  | "executing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface PlanStep {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly affectedFiles: readonly string[];
+  readonly capabilities: readonly Capability[];
+}
+
 // Agent 运行过程通过不可变事件传给 IDE；UI 只投影事件，不保存另一份事实状态。
 export type AgentEvent =
   | { type: "session.created"; sessionId: string; workspaceId?: string }
   | { type: "session.started"; sessionId: string; runId: string }
-  | { type: "plan.created"; sessionId: string; confidence: number; affectedFiles: string[] }
+  | { type: "user.message.added"; sessionId: string; messageId: string; content: string }
+  | {
+    type: "plan.created";
+    sessionId: string;
+    planId: string;
+    title: string;
+    summary: string;
+    confidence: number;
+    affectedFiles: string[];
+    steps: PlanStep[];
+    status: "reviewing";
+    createdAt: string;
+  }
+  | {
+    type: "plan.resolved";
+    sessionId: string;
+    planId: string;
+    decision: "approved" | "rejected";
+    updatedAt: string;
+  }
+  | {
+    type: "plan.status.changed";
+    sessionId: string;
+    planId: string;
+    status: Exclude<PlanStatus, "reviewing" | "approved" | "rejected">;
+    updatedAt: string;
+    message?: string;
+  }
   | { type: "model.started"; sessionId: string; turn: number }
-  | { type: "assistant.delta"; sessionId: string; delta: string }
+  | { type: "assistant.started"; sessionId: string; messageId: string; turn: number }
+  | { type: "assistant.delta"; sessionId: string; messageId: string; delta: string }
   | { type: "assistant.completed"; sessionId: string; messageId: string }
-  | { type: "tool.requested"; sessionId: string; toolName: string; capabilities: Capability[] }
-  | { type: "tool.inspected"; sessionId: string; toolName: string; affectedFiles: string[] }
+  | {
+    type: "session.usage.updated";
+    sessionId: string;
+    inputTokens: number;
+    outputTokens: number;
+  }
+  | {
+    type: "tool.requested";
+    sessionId: string;
+    toolCallId: string;
+    toolName: string;
+    description: string;
+    riskLevel: ToolRiskLevel;
+    capabilities: Capability[];
+  }
+  | {
+    type: "tool.inspected";
+    sessionId: string;
+    toolCallId: string;
+    toolName: string;
+    riskLevel: ToolRiskLevel;
+    affectedFiles: string[];
+    networkTargets: string[];
+    commands: string[];
+  }
   | { type: "tool.started"; sessionId: string; toolName: string; toolCallId: string }
-  | { type: "tool.progress"; sessionId: string; toolName: string; toolCallId: string; message: string }
-  | { type: "permission.requested"; sessionId: string; requestId: string; capabilities: Capability[] }
-  | { type: "permission.resolved"; sessionId: string; requestId: string; decision: "allow" | "deny" }
-  | { type: "tool.completed"; sessionId: string; toolName: string; success: boolean; toolCallId?: string }
+  | {
+    type: "tool.progress";
+    sessionId: string;
+    toolName: string;
+    toolCallId: string;
+    message: string;
+  }
+  | {
+    type: "permission.requested";
+    sessionId: string;
+    requestId: string;
+    toolCallId: string;
+    toolName: string;
+    riskLevel: ToolRiskLevel;
+    capabilities: Capability[];
+    affectedFiles: string[];
+    reason: string;
+  }
+  | {
+    type: "permission.resolved";
+    sessionId: string;
+    requestId: string;
+    decision: "allow" | "deny";
+  }
+  | {
+    type: "tool.completed";
+    sessionId: string;
+    toolName: string;
+    success: boolean;
+    toolCallId: string;
+  }
   | { type: "diff.proposed"; sessionId: string; proposalId: string; affectedFiles: string[] }
-  | { type: "diff.resolved"; sessionId: string; proposalId: string; decision: "accepted" | "rejected" | "conflict"; checkpointId?: string }
+  | {
+    type: "diff.resolved";
+    sessionId: string;
+    proposalId: string;
+    decision: "accepted" | "rejected" | "conflict";
+    checkpointId?: string;
+  }
   | { type: "checkpoint.created"; sessionId: string; checkpointId: string; proposalId: string }
   | { type: "checkpoint.restored"; sessionId: string; checkpointId: string; affectedFiles: string[] }
   | { type: "session.completed"; sessionId: string }

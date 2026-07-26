@@ -85,14 +85,31 @@ test("Workbench 状态可以通过事件重放恢复", () => {
   const planned = projectWorkbenchSnapshot(created, {
     type: "plan.created",
     sessionId: "session-1",
+    planId: "plan-1",
+    title: "修改应用",
+    summary: "更新应用入口",
     confidence: 92,
     affectedFiles: ["src/app.ts"],
+    steps: [{
+      id: "plan-1-step-1",
+      title: "修改文件",
+      description: "更新 src/app.ts",
+      affectedFiles: ["src/app.ts"],
+      capabilities: ["workspace.propose"],
+    }],
+    status: "reviewing",
+    createdAt: "2026-07-26T00:00:00.000Z",
   });
   const permission = projectWorkbenchSnapshot(planned, {
     type: "permission.requested",
     sessionId: "session-1",
     requestId: "permission-1",
+    toolCallId: "tool-call-1",
+    toolName: "Write",
+    riskLevel: "workspace-write",
     capabilities: ["workspace.write"],
+    affectedFiles: ["src/app.ts"],
+    reason: "写入修改",
   });
   const resolved = projectWorkbenchSnapshot(permission, {
     type: "permission.resolved",
@@ -101,7 +118,7 @@ test("Workbench 状态可以通过事件重放恢复", () => {
     decision: "deny",
   });
 
-  assert.equal(planned.lastPlanConfidence, 92);
+  assert.equal(planned.plans[0]?.confidence, 92);
   assert.equal(permission.pendingPermissions.length, 1);
   assert.equal(resolved.pendingPermissions.length, 0);
 });

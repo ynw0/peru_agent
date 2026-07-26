@@ -80,6 +80,7 @@ const session = new AgentSession("session-smoke", "workspace-smoke", "autoReview
 session.start("run-smoke");
 const decision = await new PermissionCoordinator(new IncrementingIdGenerator()).authorize(
   session,
+  "tool-call-permission",
   {
     name: "PowerShell",
     version: "1.0.0",

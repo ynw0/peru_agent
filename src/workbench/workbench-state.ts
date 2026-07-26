@@ -1,13 +1,51 @@
-import type { AgentEvent, Capability } from "../agent-protocol.js";
+import type {
+  AgentEvent,
+  Capability,
+  PlanStatus,
+  PlanStep,
+  ToolRiskLevel,
+} from "../agent-protocol.js";
+import type { AgentSessionStatus } from "../agent/types.js";
+
+export interface ChatMessageView {
+  readonly id: string;
+  readonly role: "user" | "assistant";
+  readonly content: string;
+  readonly state: "streaming" | "completed";
+}
 
 export interface PendingPermissionView {
   readonly requestId: string;
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly riskLevel: ToolRiskLevel;
   readonly capabilities: readonly Capability[];
+  readonly affectedFiles: readonly string[];
+  readonly reason: string;
 }
 
 export interface ToolActivityView {
+  readonly toolCallId: string;
   readonly toolName: string;
+  readonly description: string;
+  readonly riskLevel: ToolRiskLevel;
+  readonly capabilities: readonly Capability[];
+  readonly affectedFiles: readonly string[];
+  readonly networkTargets: readonly string[];
+  readonly commands: readonly string[];
+  readonly progressMessages: readonly string[];
   readonly state: "requested" | "running" | "completed" | "failed";
+}
+
+export interface PlanReviewView {
+  readonly planId: string;
+  readonly title: string;
+  readonly summary: string;
+  readonly confidence: number;
+  readonly affectedFiles: readonly string[];
+  readonly steps: readonly PlanStep[];
+  readonly status: PlanStatus;
+  readonly message?: string;
 }
 
 export interface DiffProposalView {
@@ -27,25 +65,33 @@ export interface CheckpointView {
 export interface WorkbenchSnapshot {
   readonly activeSessionId?: string;
   readonly activeRunId?: string;
-  readonly lastPlanConfidence?: number;
+  readonly sessionStatus: AgentSessionStatus | "none";
+  readonly chatMessages: readonly ChatMessageView[];
+  readonly plans: readonly PlanReviewView[];
   readonly affectedFiles: readonly string[];
   readonly pendingPermissions: readonly PendingPermissionView[];
   readonly tools: readonly ToolActivityView[];
   readonly diffProposals: readonly DiffProposalView[];
   readonly checkpoints: readonly CheckpointView[];
-  readonly assistantText: string;
+  readonly usage: {
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+  };
   readonly completed: boolean;
   readonly failed?: { readonly code: string; readonly message: string };
   readonly aborted: boolean;
 }
 
 export const EMPTY_WORKBENCH_SNAPSHOT: WorkbenchSnapshot = {
+  sessionStatus: "none",
+  chatMessages: [],
+  plans: [],
   affectedFiles: [],
   pendingPermissions: [],
   tools: [],
   diffProposals: [],
   checkpoints: [],
-  assistantText: "",
+  usage: { inputTokens: 0, outputTokens: 0 },
   completed: false,
   aborted: false,
 };
@@ -59,65 +105,175 @@ export function projectWorkbenchSnapshot(
     case "session.created":
       return {
         activeSessionId: event.sessionId,
+        sessionStatus: "idle",
+        chatMessages: [],
+        plans: [],
         affectedFiles: [],
         pendingPermissions: [],
         tools: [],
         diffProposals: [],
         checkpoints: [],
-        assistantText: "",
+        usage: { inputTokens: 0, outputTokens: 0 },
         completed: false,
         aborted: false,
       };
     case "session.started":
+      {
+        const { failed: _failed, ...rest } = current;
+        return {
+          ...rest,
+          activeSessionId: event.sessionId,
+          activeRunId: event.runId,
+          sessionStatus: "running",
+          completed: false,
+          aborted: false,
+        };
+      }
+    case "user.message.added":
       return {
         ...current,
-        activeSessionId: event.sessionId,
-        activeRunId: event.runId,
-        assistantText: "",
-        completed: false,
-        aborted: false,
+        chatMessages: [
+          ...current.chatMessages,
+          { id: event.messageId, role: "user", content: event.content, state: "completed" },
+        ],
       };
     case "plan.created":
       return {
         ...current,
-        activeSessionId: event.sessionId,
-        lastPlanConfidence: event.confidence,
-        affectedFiles: [...event.affectedFiles],
+        affectedFiles: mergeStrings(current.affectedFiles, event.affectedFiles),
+        plans: [
+          ...current.plans,
+          {
+            planId: event.planId,
+            title: event.title,
+            summary: event.summary,
+            confidence: event.confidence,
+            affectedFiles: [...event.affectedFiles],
+            steps: event.steps.map(step => ({
+              ...step,
+              affectedFiles: [...step.affectedFiles],
+              capabilities: [...step.capabilities],
+            })),
+            status: "reviewing",
+          },
+        ],
+      };
+    case "plan.resolved":
+      return {
+        ...current,
+        plans: updatePlan(current.plans, event.planId, {
+          status: event.decision,
+        }),
+      };
+    case "plan.status.changed":
+      return {
+        ...current,
+        plans: updatePlan(current.plans, event.planId, {
+          status: event.status,
+          ...(event.message === undefined ? {} : { message: event.message }),
+        }),
       };
     case "model.started":
       return current;
+    case "assistant.started":
+      return {
+        ...current,
+        chatMessages: [
+          ...current.chatMessages,
+          { id: event.messageId, role: "assistant", content: "", state: "streaming" },
+        ],
+      };
     case "assistant.delta":
-      return { ...current, assistantText: current.assistantText + event.delta };
+      return {
+        ...current,
+        chatMessages: current.chatMessages.map(message =>
+          message.id === event.messageId
+            ? { ...message, content: message.content + event.delta }
+            : message),
+      };
     case "assistant.completed":
-      return current;
+      return {
+        ...current,
+        chatMessages: current.chatMessages.map(message =>
+          message.id === event.messageId
+            ? { ...message, state: "completed" }
+            : message),
+      };
+    case "session.usage.updated":
+      return {
+        ...current,
+        usage: {
+          inputTokens: event.inputTokens,
+          outputTokens: event.outputTokens,
+        },
+      };
     case "tool.requested":
       return {
         ...current,
-        tools: [...current.tools, { toolName: event.toolName, state: "requested" }],
+        tools: [
+          ...current.tools,
+          {
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            description: event.description,
+            riskLevel: event.riskLevel,
+            capabilities: [...event.capabilities],
+            affectedFiles: [],
+            networkTargets: [],
+            commands: [],
+            progressMessages: [],
+            state: "requested",
+          },
+        ],
       };
     case "tool.inspected":
       return {
         ...current,
-        affectedFiles: [...new Set([...current.affectedFiles, ...event.affectedFiles])],
+        affectedFiles: mergeStrings(current.affectedFiles, event.affectedFiles),
+        tools: updateTool(current.tools, event.toolCallId, tool => ({
+          ...tool,
+          affectedFiles: [...event.affectedFiles],
+          networkTargets: [...event.networkTargets],
+          commands: [...event.commands],
+        })),
       };
     case "tool.started":
       return {
         ...current,
-        tools: updateLatestTool(current.tools, event.toolName, "running"),
+        tools: updateTool(current.tools, event.toolCallId, tool => ({
+          ...tool,
+          state: "running",
+        })),
       };
     case "tool.progress":
-      return current;
+      return {
+        ...current,
+        tools: updateTool(current.tools, event.toolCallId, tool => ({
+          ...tool,
+          progressMessages: [...tool.progressMessages, event.message],
+        })),
+      };
     case "permission.requested":
       return {
         ...current,
+        sessionStatus: "awaitingPermission",
         pendingPermissions: [
           ...current.pendingPermissions,
-          { requestId: event.requestId, capabilities: [...event.capabilities] },
+          {
+            requestId: event.requestId,
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            riskLevel: event.riskLevel,
+            capabilities: [...event.capabilities],
+            affectedFiles: [...event.affectedFiles],
+            reason: event.reason,
+          },
         ],
       };
     case "permission.resolved":
       return {
         ...current,
+        sessionStatus: "running",
         pendingPermissions: current.pendingPermissions.filter(
           permission => permission.requestId !== event.requestId,
         ),
@@ -125,16 +281,15 @@ export function projectWorkbenchSnapshot(
     case "tool.completed":
       return {
         ...current,
-        tools: updateLatestTool(
-          current.tools,
-          event.toolName,
-          event.success ? "completed" : "failed",
-        ),
+        tools: updateTool(current.tools, event.toolCallId, tool => ({
+          ...tool,
+          state: event.success ? "completed" : "failed",
+        })),
       };
     case "diff.proposed":
       return {
         ...current,
-        affectedFiles: [...new Set([...current.affectedFiles, ...event.affectedFiles])],
+        affectedFiles: mergeStrings(current.affectedFiles, event.affectedFiles),
         diffProposals: [
           ...current.diffProposals,
           {
@@ -151,9 +306,7 @@ export function projectWorkbenchSnapshot(
           proposal.proposalId === event.proposalId
             ? {
               ...proposal,
-              status: event.decision === "accepted"
-                ? "accepted"
-                : event.decision === "rejected" ? "rejected" : "conflict",
+              status: event.decision,
               ...(event.checkpointId === undefined ? {} : { checkpointId: event.checkpointId }),
             }
             : proposal),
@@ -169,41 +322,76 @@ export function projectWorkbenchSnapshot(
     case "checkpoint.restored":
       return {
         ...current,
-        affectedFiles: [...new Set([...current.affectedFiles, ...event.affectedFiles])],
+        affectedFiles: mergeStrings(current.affectedFiles, event.affectedFiles),
         checkpoints: current.checkpoints.map(checkpoint =>
           checkpoint.checkpointId === event.checkpointId
             ? { ...checkpoint, restored: true }
             : checkpoint),
       };
     case "session.completed":
-      return { ...withoutActiveRun(current), completed: true };
+      return {
+        ...withoutActiveRun(current),
+        sessionStatus: "completed",
+        completed: true,
+      };
     case "session.failed":
       return {
         ...withoutActiveRun(current),
+        sessionStatus: "failed",
         failed: { code: event.code, message: event.message },
         completed: false,
       };
     case "session.aborted":
-      return { ...withoutActiveRun(current), aborted: true, completed: false };
+      return {
+        ...withoutActiveRun(current),
+        sessionStatus: "aborted",
+        aborted: true,
+        completed: false,
+      };
   }
 }
 
-function updateLatestTool(
+function updateTool(
   tools: readonly ToolActivityView[],
-  toolName: string,
-  state: ToolActivityView["state"],
+  toolCallId: string,
+  updater: (tool: ToolActivityView) => ToolActivityView,
 ): readonly ToolActivityView[] {
-  const result = [...tools];
-  for (let index = result.length - 1; index >= 0; index -= 1) {
-    const item = result[index];
-    if (item?.toolName === toolName && (item.state === "requested" || item.state === "running")) {
-      result[index] = { ...item, state };
-      return result;
+  let found = false;
+  const updated = tools.map(tool => {
+    if (tool.toolCallId !== toolCallId) {
+      return tool;
     }
+    found = true;
+    return updater(tool);
+  });
+  if (!found) {
+    throw new Error(`Workbench 收到未知 ToolCall 事件：${toolCallId}`);
   }
-  return [...result, { toolName, state }];
+  return updated;
 }
 
+function updatePlan(
+  plans: readonly PlanReviewView[],
+  planId: string,
+  changes: Partial<Pick<PlanReviewView, "status" | "message">>,
+): readonly PlanReviewView[] {
+  let found = false;
+  const updated = plans.map(plan => {
+    if (plan.planId !== planId) {
+      return plan;
+    }
+    found = true;
+    return { ...plan, ...changes };
+  });
+  if (!found) {
+    throw new Error(`Workbench 收到未知 Plan 事件：${planId}`);
+  }
+  return updated;
+}
+
+function mergeStrings(left: readonly string[], right: readonly string[]): readonly string[] {
+  return [...new Set([...left, ...right])];
+}
 
 function withoutActiveRun(snapshot: WorkbenchSnapshot): WorkbenchSnapshot {
   const { activeRunId: _activeRunId, ...rest } = snapshot;

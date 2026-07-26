@@ -8,38 +8,40 @@
 - Phase 3：自研 Agent Core 完成；
 - Phase 4：Workspace、Diff、Checkpoint 和文件冲突检测完成；
 - Phase 5：PowerShell AST、Broker 协议和 Windows 原生安全原型源码完成；
-- 下一开发阶段：Phase 6 AI IDE 交互层。
+- Phase 6：AI IDE 交互领域模型、Typed IPC Controller、事件重放和 Code OSS 原生 View Overlay 完成；
+- 下一开发阶段：Phase 7 低延迟代码补全。
 
-## Phase 5 已完成
+## Phase 6 已完成
 
-- Windows Sandbox Broker JSONL 协议；
-- 强制能力握手；
-- PowerShell Tool 与官方 AST 分析接口；
-- executionId、analysisId 和脚本 SHA-256 绑定；
-- 动态 Capability 接入现有权限系统；
-- 执行取消和分析释放协议；
-- Restricted Token、AppContainer、Job Object、ACL 和审计日志 C# 源码；
-- 禁止 PowerShell 直接修改工作区；
-- Phase 9 之前禁止沙箱直接 LAN/互联网访问；
-- Windows 构建和集成测试脚本。
+- Agent Chat 消息、流式 delta、Token 用量和运行状态；
+- 发送、继续、停止和 Retry；
+- Plan 创建、审核、执行、完成、失败和取消状态机；
+- Tool 风险、能力、影响文件、命令、网络目标和进度卡片；
+- Permission 允许/拒绝交互；
+- Diff 接受/拒绝、Conflict 和 Checkpoint 恢复交互；
+- 会话列表、事件时间线和按 Session 隔离的 Snapshot；
+- EventJournal 重放和领域时间戳恢复；
+- Agent、Tasks、Permissions 三个可交互 Code OSS ViewPane；
+- Browser View 明确显示运行时尚未连接，不提供虚假能力；
+- Workbench View 只能通过 Bridge 和 Typed IPC 请求能力。
 
 ## 验证结果
 
 ```text
-npm run audit → 通过
-npm run check → 通过
-npm test      → 60 passed
-npm run build → 通过
-npm run smoke → Phase 0~5 全部通过
+npm run audit                  → 通过
+npm run check                  → 通过
+npm test                       → 69 passed
+npm run build                  → 通过
+npm run smoke                  → Phase 0~6 全部通过
+npm run code-oss:check-overlay → 通过
+node tools/code-oss/verify-overlay.mjs → 通过
 ```
 
 ## 未通过或未执行门禁
 
-- 当前环境为 Linux，没有 `pwsh` 和 .NET SDK 8；
-- `npm run sandbox:build-windows` 已执行并以 exit code 127 明确失败；
-- C# Broker 尚未在 Windows 11 x64 编译；
-- AppContainer、Restricted Token、Job Object 和 ACL 尚未真机运行；
-- 路径、进程树和网络逃逸红队测试尚未执行；
-- Windows 真机门禁通过前，产品不得启用 PowerShell Tool；
-- Code OSS 完整依赖安装和桌面启动仍未完成；
-- 未对真实 OpenAI 兼容模型服务执行联网调用。
+- Code OSS 1.74.0 锁定依赖尚未安装；
+- Electron Workbench 完整编译和桌面启动尚未执行成功；
+- 主进程到独立 Agent Runtime 的生产 IPC Transport 尚未安装；
+- Windows Sandbox Broker 尚未在 Windows 11 x64 编译和红队验证；
+- 真实 LM Studio、vLLM 或云端 OpenAI 兼容模型端点尚未执行集成测试；
+- 当前 Code OSS View Overlay 通过了源码契约和独立 TypeScript 检查，但不能据此宣称完整桌面 IDE 已运行。

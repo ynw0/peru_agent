@@ -277,6 +277,7 @@ test("权限协调器合并 Tool Manifest 与 AST 动态能力", async () => {
   session.start("run");
   const decision = await coordinator.authorize(
     session,
+    "tool-call-permission",
     {
       name: "PowerShell",
       version: "1.0.0",

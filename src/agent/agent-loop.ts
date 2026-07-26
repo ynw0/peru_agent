@@ -2,7 +2,7 @@ import type { AgentEvent } from "../agent-protocol.js";
 import type { ModelProvider, AssembledModelResponse } from "../model/types.js";
 import { ToolCallAssembler } from "../model/tool-call-assembler.js";
 import type { SessionStore } from "../storage/session-store.js";
-import type { Tool, ToolExecutionContext } from "../tool-runtime.js";
+import type { ToolExecutionContext } from "../tool-runtime.js";
 import { ToolRegistry } from "../tool-runtime.js";
 import { AgentError } from "./errors.js";
 import type { EventJournal } from "./event-journal.js";
@@ -54,20 +54,46 @@ export class AgentLoop {
         throw new AgentError("INTERNAL_ERROR", "用户输入不能为空");
       }
 
+      const userMessageId = this.dependencies.idGenerator.next("message");
       session.appendMessage({
-        id: this.dependencies.idGenerator.next("message"),
+        id: userMessageId,
         role: "user",
         content: userInput,
       });
       await this.persist(session);
+      await emit({
+        type: "user.message.added",
+        sessionId: session.id,
+        messageId: userMessageId,
+        content: userInput,
+      });
 
       let toolCallCount = 0;
       for (let turn = 1; turn <= this.options.limits.maxTurns; turn += 1) {
         this.assertNotAborted(signal);
         await emit({ type: "model.started", sessionId: session.id, turn });
 
-        const response = await this.collectModelResponse(session, turn, emit, signal);
+        // 在开始接收 delta 前固定 messageId，UI 才能把流式文本投影到正确消息。
+        const assistantMessageId = this.dependencies.idGenerator.next("message");
+        await emit({
+          type: "assistant.started",
+          sessionId: session.id,
+          messageId: assistantMessageId,
+          turn,
+        });
+        const response = await this.collectModelResponse(
+          session,
+          assistantMessageId,
+          emit,
+          signal,
+        );
         session.addUsage(response.usage.inputTokens, response.usage.outputTokens);
+        await emit({
+          type: "session.usage.updated",
+          sessionId: session.id,
+          inputTokens: session.snapshot().usage.inputTokens,
+          outputTokens: session.snapshot().usage.outputTokens,
+        });
         if (session.getTotalTokens() > this.options.limits.maxTotalTokens) {
           throw new AgentError(
             "TOKEN_BUDGET_EXCEEDED",
@@ -75,7 +101,6 @@ export class AgentLoop {
           );
         }
 
-        const assistantMessageId = this.dependencies.idGenerator.next("message");
         session.appendMessage({
           id: assistantMessageId,
           role: "assistant",
@@ -151,7 +176,7 @@ export class AgentLoop {
 
   private async collectModelResponse(
     session: AgentSession,
-    _turn: number,
+    assistantMessageId: string,
     emit: AgentEventEmitter,
     signal: AbortSignal,
   ): Promise<AssembledModelResponse> {
@@ -175,7 +200,12 @@ export class AgentLoop {
 
       if (event.type === "text.delta") {
         text += event.delta;
-        await emit({ type: "assistant.delta", sessionId: session.id, delta: event.delta });
+        await emit({
+          type: "assistant.delta",
+          sessionId: session.id,
+          messageId: assistantMessageId,
+          delta: event.delta,
+        });
       } else if (event.type === "tool-call.delta") {
         assembler.accept(event);
       } else {
@@ -216,7 +246,10 @@ export class AgentLoop {
     await emit({
       type: "tool.requested",
       sessionId: session.id,
+      toolCallId: toolCall.id,
       toolName: tool.manifest.name,
+      description: tool.manifest.description ?? tool.manifest.name,
+      riskLevel: tool.manifest.riskLevel,
       capabilities: [...tool.manifest.capabilities],
     });
 
@@ -242,11 +275,16 @@ export class AgentLoop {
       await emit({
         type: "tool.inspected",
         sessionId: session.id,
+        toolCallId: toolCall.id,
         toolName: tool.manifest.name,
+        riskLevel: tool.manifest.riskLevel,
         affectedFiles: [...inspection.affectedFiles],
+        networkTargets: [...(inspection.networkTargets ?? [])],
+        commands: [...(inspection.commands ?? [])],
       });
       const permission = await this.dependencies.permissions.authorize(
         session,
+        toolCall.id,
         tool.manifest,
         inspection,
         emit,
