@@ -4,7 +4,7 @@ import { extname, join, relative } from "node:path";
 
 const root = new URL("../", import.meta.url);
 const checkedExtensions = new Set([".ts", ".tsx", ".js", ".mjs", ".json"]);
-const ignoredDirectories = new Set(["node_modules", "dist", ".git"]);
+const ignoredDirectories = new Set(["node_modules", "dist", ".git", "upstream"]);
 const secretPatterns = [
   /sk-[A-Za-z0-9_-]{16,}/,
   /(?:api[_-]?key|token|password)\s*[:=]\s*["'][^"']{8,}["']/i,

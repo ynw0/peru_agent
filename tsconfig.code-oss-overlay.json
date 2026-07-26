@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "baseUrl": "./overlays/code-oss/src",
+    "paths": {
+      "vs/*": ["vs/*"]
+    },
+    "strict": true,
+    "noImplicitOverride": true,
+    "experimentalDecorators": true,
+    "noEmit": true,
+    "skipLibCheck": false,
+    "lib": ["ES2020", "DOM"]
+  },
+  "include": [
+    "tools/code-oss/overlay-contract-stubs.d.ts",
+    "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/**/*.ts"
+  ]
+}

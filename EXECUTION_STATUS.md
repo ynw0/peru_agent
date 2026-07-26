@@ -2,43 +2,41 @@
 
 ## 当前阶段
 
-- Phase 0：完成
-- Phase 1：产品骨架与 Typed IPC 完成；Code OSS 下载因执行环境 DNS 失败未完成
+- Phase 0：完成；
+- Phase 1：产品身份、Typed IPC 与 Workbench 容器设计完成；
+- Code OSS 真实接入：源码导入、Overlay 应用和源码契约验证完成；
+- Code OSS 完整编译和桌面启动：未完成，缺少上游锁定依赖和匹配工具链；
+- 下一开发阶段：自研 Agent Core。
 
-## Phase 1 已执行
+## Code OSS 基线
 
-- 创建 `phase-1-product-ipc` 独立分支；
-- 固定 Code OSS `1.130.0` / `1b6a188127eeaf9194f945eb6eb89a657e93c54c`；
-- 创建独立产品身份和 Overlay；
-- 创建 Agent、Task、Permission、Browser Workbench 容器定义；
-- 实现版本化 Typed IPC；
-- 实现方法级请求参数和响应结果运行时校验；
-- 实现超时、中止、错误码和资源清理；
-- 实现事件重放式 Workbench Snapshot；
-- 创建 Code OSS 获取、校验和 Overlay 应用脚本；
-- 创建 Phase 1 架构文档、ADR 和经验总结；
-- 运行全部质量门禁。
+- 版本：`1.74.0`；
+- 来源：用户上传固定归档；
+- SHA-256：`debf828bfd82cb4c167757aaa03ef1663ea5999e110f965ec2ae38d8bb884065`；
+- 许可：MIT；
+- 上游要求：Node.js `16.14`。
+
+## 已执行
+
+- 归档和关键文件指纹校验；
+- 独立产品身份 Overlay；
+- Workbench Desktop Import；
+- Agent、Tasks、Permissions、Browser 原生容器；
+- 四个原生占位 ViewPane；
+- Overlay TypeScript 检查；
+- Code OSS 内部 API 契约检查；
+- Overlay 应用结果检查；
+- Phase 0~2 项目门禁。
 
 ## 验证结果
 
 ```text
-npm run audit   → 通过
-npm run check   → 通过
-npm test        → 18 passed
-npm run build   → 通过
-npm run smoke   → Phase 0、Phase 1 均通过
+npm run verify                  → 22 passed
+npm run code-oss:check-overlay  → 通过
+npm run code-oss:verify-applied → 通过
 ```
 
-## Code OSS 获取
+## 未通过门禁
 
-已执行 `npm run code-oss:fetch`。当前环境无法解析 `github.com`，Git 退出码为 128。
-
-没有改用其他版本、镜像或缓存，也没有标记为下载成功。
-
-## 下一步
-
-1. 在可访问 GitHub 的环境执行 `npm run code-oss:fetch`；
-2. 执行 `npm run code-oss:apply-overlay`；
-3. 在固定 Code OSS 1.130.0 上实现真实 Workbench Registry 适配器；
-4. 编译并启动独立 Code OSS 桌面骨架；
-5. 完成后进入 Phase 2：自研 Agent Core。
+Code OSS 原始 `npm run compile` 已真实执行，因 `node_modules/gulp/bin/gulp.js` 不存在而失败。
+当前状态不能标记为“桌面 IDE 已编译或启动”。

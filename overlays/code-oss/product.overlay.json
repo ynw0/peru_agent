@@ -1,8 +1,30 @@
 {
+  "$delete": [
+    "reportIssueUrl",
+    "webviewContentExternalBaseUrlTemplate"
+  ],
   "nameShort": "Independent AI IDE",
   "nameLong": "Independent AI IDE",
   "applicationName": "independent-ai-ide",
   "dataFolderName": ".independent-ai-ide",
   "urlProtocol": "independent-ai-ide",
-  "enableTelemetry": false
+  "serverApplicationName": "independent-ai-ide-server",
+  "serverDataFolderName": ".independent-ai-ide-server",
+  "tunnelApplicationName": "independent-ai-ide-tunnel",
+  "win32MutexName": "independentaiide",
+  "win32DirName": "Independent AI IDE",
+  "win32NameVersion": "Independent AI IDE",
+  "win32RegValueName": "IndependentAIIde",
+  "win32AppId": "{{C740775B-2E51-42A0-80FA-3843E8946807}}",
+  "win32x64AppId": "{{088EDA8D-61AA-429A-9FFF-8DCDCB0B770E}}",
+  "win32arm64AppId": "{{CFD39CB3-A7DE-48C5-986A-8F7520DE853E}}",
+  "win32UserAppId": "{{31BB3D9E-858D-462C-B01B-8B25D99BF076}}",
+  "win32x64UserAppId": "{{A185FFB5-A211-4C81-BC01-63885B1012AA}}",
+  "win32arm64UserAppId": "{{B6DD6A54-8D1A-401F-B6AC-083366A72F16}}",
+  "win32AppUserModelId": "IndependentAIIde.Desktop",
+  "win32ShellNameShort": "Independent AI IDE",
+  "darwinBundleIdentifier": "com.independentaiide.desktop",
+  "linuxIconName": "com.independentaiide.desktop",
+  "enableTelemetry": false,
+  "builtInExtensions": []
 }

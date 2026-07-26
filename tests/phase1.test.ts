@@ -15,7 +15,7 @@ import {
 
 test("Code OSS 固定版本清单必须有效", () => {
   validateCodeOssSourcePin(CODE_OSS_SOURCE_PIN);
-  assert.equal(CODE_OSS_SOURCE_PIN.tag, "1.130.0");
+  assert.equal(CODE_OSS_SOURCE_PIN.version, "1.74.0");
 });
 
 test("独立产品清单不能使用 Microsoft 产品品牌", () => {

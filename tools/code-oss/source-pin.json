@@ -1,6 +1,14 @@
 {
-  "repository": "https://github.com/microsoft/vscode.git",
-  "tag": "1.130.0",
-  "commit": "1b6a188127eeaf9194f945eb6eb89a657e93c54c",
-  "license": "MIT"
+  "sourceType": "archive",
+  "version": "1.74.0",
+  "archiveFileName": "code-main.zip",
+  "archiveSha256": "debf828bfd82cb4c167757aaa03ef1663ea5999e110f965ec2ae38d8bb884065",
+  "archiveRootDirectory": "code-main",
+  "license": "MIT",
+  "requiredFileSha256": {
+    "package.json": "7bb5c3f8d4f03f9e911364efab6d9012fa9c150a351c6c02f21202b20db149d9",
+    "product.json": "8f7059a91c5b51ad4f03f99004b60e3589c9c04346de110be666bdefb7ee4007",
+    "LICENSE.txt": "cce33203a80863c22499035b1cfb6aba5df5f02e4ea2669cf5bc5730c1864236",
+    "src/vs/workbench/workbench.desktop.main.ts": "90e5db8531ac0f7d75324fc5c5a1fe770b37b21405553f62fde42b66b70835e8"
+  }
 }

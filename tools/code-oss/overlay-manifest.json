@@ -1,6 +1,6 @@
 {
-  "sourceTag": "1.130.0",
-  "sourceCommit": "1b6a188127eeaf9194f945eb6eb89a657e93c54c",
+  "sourceVersion": "1.74.0",
+  "sourceArchiveSha256": "debf828bfd82cb4c167757aaa03ef1663ea5999e110f965ec2ae38d8bb884065",
   "entries": [
     {
       "source": "overlays/code-oss/product.overlay.json",
@@ -8,14 +8,25 @@
       "mode": "merge-json"
     },
     {
-      "source": "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/common/independentAiIde.contribution.ts",
-      "target": "src/vs/workbench/contrib/independentAiIde/common/independentAiIde.contribution.ts",
+      "source": "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/common/independentAiIde.ts",
+      "target": "src/vs/workbench/contrib/independentAiIde/common/independentAiIde.ts",
+      "mode": "copy"
+    },
+    {
+      "source": "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/browser/independentAiIdeView.ts",
+      "target": "src/vs/workbench/contrib/independentAiIde/browser/independentAiIdeView.ts",
       "mode": "copy"
     },
     {
       "source": "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/browser/independentAiIde.contribution.ts",
       "target": "src/vs/workbench/contrib/independentAiIde/browser/independentAiIde.contribution.ts",
       "mode": "copy"
+    },
+    {
+      "source": "overlays/code-oss/workbench.desktop.import.txt",
+      "target": "src/vs/workbench/workbench.desktop.main.ts",
+      "mode": "insert-before",
+      "anchor": "// Logs\nimport 'vs/workbench/contrib/logs/electron-sandbox/logs.contribution';"
     }
   ]
 }

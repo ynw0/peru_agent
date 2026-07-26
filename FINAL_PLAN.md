@@ -255,7 +255,7 @@ Windows Native Brokers
 
 置信度：92/100
 
-- 获取固定版本 Code OSS；
+- 导入并校验固定 Code OSS 1.74.0 归档；
 - 重新命名和替换品牌；
 - 删除微软产品专用配置；
 - 添加 Agent Activity Bar、Chat、Task 和 Permission 容器；
@@ -443,9 +443,10 @@ Windows Native Brokers
 - [x] 建立网络三模式策略；
 - [x] 建立编译和测试命令；
 - [x] 运行编译和测试；
-- [ ] 导入固定版本 Code OSS（已固定版本并执行获取；当前环境 DNS 失败）；
+- [x] 导入并校验用户提供的 Code OSS 1.74.0 固定归档；
 - [x] 建立独立产品身份与 Overlay 清单；
 - [x] 建立 Agent、Task、Permission、Browser 容器骨架；
 - [x] 实现版本化 Typed IPC；
-- [ ] 在真实 Code OSS 上编译并启动 Workbench；
+- [x] 在真实 Code OSS 上应用产品 Overlay 并注册四个原生 Workbench 容器；
+- [ ] 安装 Code OSS 锁定依赖并完成 Workbench 编译与桌面启动；
 - [ ] 实现 Windows 原生 Sandbox Broker；

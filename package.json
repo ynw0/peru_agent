@@ -1,17 +1,20 @@
 {
   "name": "independent-ai-ide-core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
     "build": "tsc",
-    "test": "npm run build && node --test dist/tests/policies.test.js dist/tests/phase1.test.js",
-    "smoke": "npm run build && node dist/src/smoke.js && node dist/src/phase1-smoke.js",
+    "test": "npm run build && node --test dist/tests/policies.test.js dist/tests/phase1.test.js dist/tests/phase2.test.js",
+    "smoke": "npm run build && node dist/src/smoke.js && node dist/src/phase1-smoke.js && node dist/src/phase2-smoke.js",
     "audit": "node tools/audit.mjs && node tools/code-oss/verify-overlay.mjs",
-    "code-oss:fetch": "node tools/code-oss/fetch.mjs",
+    "code-oss:import": "node tools/code-oss/import-archive.mjs",
+    "code-oss:apply-overlay": "node tools/code-oss/verify-overlay.mjs && node tools/code-oss/apply-overlay.mjs",
+    "code-oss:verify-applied": "npm run code-oss:check-overlay && node tools/code-oss/verify-workbench-contract.mjs && node tools/code-oss/verify-applied.mjs",
     "verify": "npm run audit && npm run check && npm test && npm run smoke",
-    "code-oss:apply-overlay": "node tools/code-oss/verify-overlay.mjs && node tools/code-oss/apply-overlay.mjs"
+    "code-oss:verify-contract": "node tools/code-oss/verify-workbench-contract.mjs",
+    "code-oss:check-overlay": "tsc -p tsconfig.code-oss-overlay.json"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

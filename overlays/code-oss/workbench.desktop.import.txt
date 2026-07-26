@@ -1,0 +1,3 @@
+// Independent AI IDE
+import 'vs/workbench/contrib/independentAiIde/browser/independentAiIde.contribution';
+
