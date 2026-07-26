@@ -298,7 +298,9 @@ Windows Native Brokers
 
 ### Phase 5：PowerShell 和 Windows 沙箱
 
-置信度：90/100，需安全原型通过后确认
+状态：TypeScript 集成与原生安全原型源码完成；Windows 11 真机构建和红队测试待执行。
+
+置信度：90/100，需 Windows 真机安全门禁通过后最终确认。
 
 - PowerShell AST；
 - Sandbox Broker；

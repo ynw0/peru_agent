@@ -229,8 +229,16 @@ export class AgentLoop {
       return this.createToolError(toolCall, `Tool 参数无效：${reason}`);
     }
 
+    const inspectionContext = {
+      sessionId: session.id,
+      workspaceId: session.workspaceId,
+      toolCallId: toolCall.id,
+      signal,
+    };
+    let inspectionCompleted = false;
     try {
-      const inspection = await tool.inspect(input);
+      const inspection = await tool.inspect(input, inspectionContext);
+      inspectionCompleted = true;
       await emit({
         type: "tool.inspected",
         sessionId: session.id,
@@ -294,6 +302,10 @@ export class AgentLoop {
       const reason = error instanceof Error ? error.message : "未知 Tool 执行错误";
       await this.emitToolCompleted(session, toolCall, false, emit);
       return this.createToolError(toolCall, `Tool 执行失败：${reason}`);
+    } finally {
+      if (inspectionCompleted) {
+        await tool.releaseInspection?.(input, inspectionContext);
+      }
     }
   }
 

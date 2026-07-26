@@ -64,3 +64,31 @@ declare module "node:path" {
   export function relative(from: string, to: string): string;
   export function resolve(...paths: string[]): string;
 }
+
+
+declare module "node:child_process" {
+  export interface WritableStreamLike {
+    write(data: string, encoding: "utf8", callback: (error?: Error | null) => void): void;
+  }
+  export interface ReadableStreamLike {
+    setEncoding(encoding: "utf8"): void;
+    on(event: "data", listener: (chunk: string) => void): void;
+  }
+  export interface ChildProcessWithoutNullStreams {
+    readonly stdin: WritableStreamLike;
+    readonly stdout: ReadableStreamLike;
+    readonly stderr: ReadableStreamLike;
+    on(event: "error", listener: (error: Error) => void): void;
+    on(event: "exit", listener: (code: number | null) => void): void;
+    kill(): boolean;
+  }
+  export function spawn(
+    command: string,
+    args: readonly string[],
+    options: {
+      shell: false;
+      windowsHide: true;
+      stdio: ["pipe", "pipe", "pipe"];
+    },
+  ): ChildProcessWithoutNullStreams;
+}

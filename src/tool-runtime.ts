@@ -15,6 +15,18 @@ export interface ToolManifest {
 export interface ToolInspection {
   readonly affectedFiles: readonly string[];
   readonly certifiedComputerApplication: boolean;
+  // 动态能力由 AST、路径和网络分析产生，权限引擎会与 Manifest 能力合并。
+  readonly requestedCapabilities?: readonly Capability[];
+  readonly networkTargets?: readonly string[];
+  readonly commands?: readonly string[];
+  readonly sandboxRequired?: boolean;
+}
+
+export interface ToolInspectionContext {
+  readonly sessionId: string;
+  readonly workspaceId: string;
+  readonly toolCallId: string;
+  readonly signal: AbortSignal;
 }
 
 export interface ToolExecutionContext {
@@ -29,8 +41,10 @@ export interface ToolExecutionContext {
 export interface Tool<TInput, TOutput> {
   readonly manifest: ToolManifest;
   validate(input: unknown): TInput;
-  inspect(input: TInput): Promise<ToolInspection> | ToolInspection;
+  inspect(input: TInput, context?: ToolInspectionContext): Promise<ToolInspection> | ToolInspection;
   execute(input: TInput, context: ToolExecutionContext): Promise<TOutput>;
+  // inspect 产生临时安全状态时必须显式释放，权限拒绝和执行失败也会调用。
+  releaseInspection?(input: TInput, context: ToolInspectionContext): Promise<void> | void;
   serializeOutput(output: TOutput): string;
 }
 

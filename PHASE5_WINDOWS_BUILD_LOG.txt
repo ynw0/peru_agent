@@ -1,0 +1,6 @@
+
+> independent-ai-ide-core@0.6.0 sandbox:build-windows
+> pwsh -NoLogo -NoProfile -NonInteractive -File native/windows-sandbox-broker/build.ps1
+
+sh: 1: pwsh: not found
+EXIT_CODE=127

@@ -62,3 +62,16 @@
 - 工作区路径必须拒绝绝对路径、盘符、UNC、`..` 和符号链接。
 - Diff、Checkpoint 和其他磁盘协议文件读取后必须运行时校验。
 - Git 和其他进程型工具在 Windows Sandbox Broker 完成前禁止启用。
+
+## PowerShell 与 Windows Sandbox 规则
+
+- PowerShell Tool 只能通过通过能力握手的 Windows Sandbox Broker 执行，禁止直接 `spawn pwsh.exe`。
+- PowerShell 安全分析必须使用官方 AST，并覆盖 Cmdlet、动态调用、成员调用、类型表达式、重定向和 Provider 路径。
+- 安全分析必须用 `executionId + analysisId + script SHA-256` 绑定执行请求和执行结果。
+- 分析结果必须一次性使用、设置过期时间，并在权限拒绝、执行完成和异常路径释放。
+- 取消进程 Tool 必须终止整个 Job Object 进程树，禁止只取消本地 Promise。
+- 已取消请求的迟到响应必须隔离处理，不能连带关闭其他正常 IPC 请求。
+- PowerShell Tool 不允许直接修改工作区；所有工作区修改继续使用 Diff Proposal。
+- Phase 9 Egress Broker 完成前，沙箱进程不得获得 LAN 或互联网 Capability。
+- AppContainer ACL 清理只能删除 Broker 自己添加的精确 ACE，禁止恢复整份 ACL 快照覆盖外部修改。
+- Windows 原生 Broker 未在 Windows 11 x64 真机完成构建和红队测试前，产品构建不得启用 PowerShell Tool。

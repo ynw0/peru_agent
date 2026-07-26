@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { extname, join, relative } from "node:path";
 
 const root = new URL("../", import.meta.url);
-const checkedExtensions = new Set([".ts", ".tsx", ".js", ".mjs", ".json"]);
+const checkedExtensions = new Set([".ts", ".tsx", ".js", ".mjs", ".json", ".cs", ".csproj", ".ps1"]);
 const ignoredDirectories = new Set(["node_modules", "dist", ".git", "upstream"]);
 const secretPatterns = [
   /sk-[A-Za-z0-9_-]{16,}/,

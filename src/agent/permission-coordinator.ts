@@ -27,7 +27,11 @@ export class PermissionCoordinator {
     emit: AgentEventEmitter,
     signal: AbortSignal,
   ): Promise<"allow" | "deny"> {
-    const decisions = manifest.capabilities.map(capability => ({
+    const capabilities = [...new Set([
+      ...manifest.capabilities,
+      ...(inspection.requestedCapabilities ?? []),
+    ])];
+    const decisions = capabilities.map(capability => ({
       capability,
       decision: decidePermission(
         session.permissionMode,

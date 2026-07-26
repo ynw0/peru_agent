@@ -8,7 +8,8 @@
 - Phase 1：独立产品身份、Typed IPC 和 Workbench 容器；
 - Phase 2：Code OSS 1.74.0 真实源码 Overlay 接入；
 - Phase 3：自研 Agent Core、OpenAI 兼容流协议和 Tool 循环；
-- Phase 4：Workspace、Diff、Checkpoint 和安全文件修改链。
+- Phase 4：Workspace、Diff、Checkpoint 和安全文件修改链；
+- Phase 5：PowerShell AST、Windows Sandbox Broker 协议和原生安全原型源码。
 
 Agent Core 已支持：
 
@@ -27,7 +28,7 @@ Agent Core 已支持：
 
 - Code OSS 完整依赖安装、编译和桌面启动；
 - Git、LSP 和 Diagnostics 工具；
-- Windows Sandbox Broker 与 PowerShell AST Broker；
+- Windows Sandbox Broker 的 Windows 11 真机构建、运行和红队验证；
 - 真实 Browser Runtime、Computer Use 和 Completion Runtime；
 - 对真实 LM Studio、vLLM 或云端模型服务的联网集成测试。
 
@@ -50,6 +51,8 @@ npm run smoke
 - `FINAL_PLAN.md`：总体计划；
 - `PROJECT_RULES.md`：强制开发和安全规则；
 - `PHASE4_REPORT.md`：Workspace、Diff 与 Checkpoint 执行报告；
+- `PHASE5_REPORT.md`：PowerShell 与 Windows Sandbox Broker 执行报告；
 - `docs/architecture/agent-core.md`：Agent Core 架构；
 - `docs/architecture/workspace-diff-checkpoint.md`：安全文件修改链；
+- `docs/architecture/powershell-windows-sandbox.md`：PowerShell 与 Windows 原生沙箱架构；
 - `docs/lessons/2026-07-26-agent-runtime-ordering-and-recovery.md`：本阶段根因经验。
