@@ -1,0 +1,21 @@
+{
+  "sourceTag": "1.130.0",
+  "sourceCommit": "1b6a188127eeaf9194f945eb6eb89a657e93c54c",
+  "entries": [
+    {
+      "source": "overlays/code-oss/product.overlay.json",
+      "target": "product.json",
+      "mode": "merge-json"
+    },
+    {
+      "source": "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/common/independentAiIde.contribution.ts",
+      "target": "src/vs/workbench/contrib/independentAiIde/common/independentAiIde.contribution.ts",
+      "mode": "copy"
+    },
+    {
+      "source": "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/browser/independentAiIde.contribution.ts",
+      "target": "src/vs/workbench/contrib/independentAiIde/browser/independentAiIde.contribution.ts",
+      "mode": "copy"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "nameShort": "Independent AI IDE",
+  "nameLong": "Independent AI IDE",
+  "applicationName": "independent-ai-ide",
+  "dataFolderName": ".independent-ai-ide",
+  "urlProtocol": "independent-ai-ide",
+  "enableTelemetry": false
+}

@@ -1,0 +1,451 @@
+# 独立 AI IDE 最终实施计划
+
+版本：1.0  
+状态：已批准并开始执行  
+目标平台：Windows 11 x64、PowerShell 7  
+默认语言：中文，可切换英文  
+总体置信度：91/100
+
+## 1. 已锁定的产品决策
+
+1. 产品形态是基于 Code OSS 的独立桌面 IDE，不先做 VS Code 插件。
+2. Agent Runtime 完全自研，不使用 Claude Agent SDK。
+3. 支持 OpenAI 兼容模型接口，Agent 模型和低延迟补全模型独立配置。
+4. 不修改上传的 Claude Code 源码；它只作为只读架构参考。
+5. 不在原 Code OSS 上游目录直接开发；建立独立产品仓库。
+6. Windows 命令执行以 PowerShell 7 为主，不以 Bash 作为 Windows 主执行器。
+7. 沙箱不可用、签名无效或策略无法证明安全时，拒绝执行，不静默降级。
+8. 网络模式只有 `offline`、`lan`、`internet` 三种，不自动切换。
+9. Computer Use 只支持经过认证的应用，不承诺操作任意 Windows 软件。
+10. 高权限 Tool 和 Skill 不允许自动晋级；只能进入候选区等待显式审批。
+11. 纯计算 Tool 和严格只读 Tool 通过完整验证后，才允许自动加入白名单。
+12. 不兼容 Claude Code 会话、配置、工具名称、Agent SDK 协议或旧产品数据。
+13. 不硬编码密钥、令牌、密码或服务凭据。
+14. 用户可见文本和中文注释使用 UTF-8。
+15. 不实现静默 fallback、旧系统兼容层或未声明兜底逻辑。
+
+## 2. 产品目标
+
+构建一套类似现代 AI IDE 的独立软件，至少具备：
+
+- 完整代码编辑、文件浏览、Git、终端、调试和 LSP 能力；
+- 多轮 Agent、计划模式、文件修改、Diff 审核、测试执行和会话恢复；
+- 自研 Tool Runtime、权限系统、沙箱系统、子 Agent 和后台任务；
+- OpenAI 兼容模型接口，包括本地 LM Studio、vLLM 等服务；
+- 独立的低延迟 FIM 代码补全系统；
+- 内置网页浏览器、联网搜索和受控 Computer Use；
+- Tool Forge 与 Skill Forge 自进化候选系统；
+- 中文和英文界面及回答语言；
+- Windows 11 和 PowerShell 7 的优先兼容与测试。
+
+## 3. 不复刻的 Claude Code 功能
+
+| 不复刻内容 | 原因 |
+|---|---|
+| Claude Agent SDK 接口 | 运行时完全自研 |
+| Anthropic 登录、订阅和计费 | 产品不绑定单一供应商 |
+| Claude 专用模型和降级逻辑 | 使用统一 OpenAI 兼容 Provider |
+| Ink 终端主界面 | 产品使用 Code OSS Workbench |
+| Anthropic Analytics 与内部 Feature Flag | 无独立产品价值，增加隐私与依赖风险 |
+| `ant-only`、内部远程服务 | 属于私有基础设施 |
+| Claude Code 会话和配置格式 | 定义新的稳定协议，不兼容旧系统 |
+| 任意 Windows 软件 Computer Use | 无法可靠验证目标和执行结果 |
+| 高权限 Tool/Skill 自动白名单 | 无法仅靠自动测试证明长期安全 |
+| 自动模型 fallback | 会掩盖真实故障和能力差异 |
+| 沙箱失败后普通权限执行 | 违反安全边界 |
+
+## 4. 总体架构
+
+```text
+Code OSS Desktop IDE
+├── Editor / Explorer / SCM / Terminal / Debug / LSP
+├── Agent Chat / Plan / Diff Review / Task / Permission UI
+├── Completion UI / Ghost Text
+└── Browser / Computer Use UI
+             │ Typed IPC
+             ▼
+Agent Runtime
+├── AgentSession / AgentLoop / EventJournal
+├── ContextEngine / MemoryStore
+├── ToolRuntime / PermissionEngine / TaskRuntime
+├── ModelGateway / CompletionEngine
+├── SubagentRuntime / WorktreeManager
+├── BrowserRuntime / ComputerUseRuntime
+├── NetworkPolicy / EgressBroker
+└── SelfEvolution / ToolForge / SkillForge
+             │
+             ▼
+Windows Native Brokers
+├── Sandbox Broker
+├── Computer Use Broker
+└── Credential Broker
+```
+
+## 5. 代码模块
+
+| 模块 | 主要职责 |
+|---|---|
+| `agent-protocol` | Agent 事件、会话、权限、网络模式和公共协议 |
+| `agent-core` | Agent 循环、消息历史、事件日志、中断和恢复 |
+| `model-gateway` | OpenAI 兼容 Chat/Responses/FIM 适配 |
+| `tool-runtime` | Tool 接口、注册、校验、执行和结果映射 |
+| `permission-engine` | 默认、自动审核、完全访问三种模式 |
+| `network-policy` | offline、lan、internet 策略 |
+| `completion-engine` | 低延迟 FIM 请求、取消、缓存和质量控制 |
+| `subagent-runtime` | 子 Agent 任务、预算、深度和 Worktree 隔离 |
+| `browser-runtime` | Playwright 浏览器会话、DOM、截图和下载 |
+| `computer-use` | 认证应用注册、UIA 证据和动作授权 |
+| `self-evolution` | Tool/Skill 候选生成、验证和晋级策略 |
+| `workspace-service` | 文件、Git、LSP、Diagnostics 和项目索引 |
+| `i18n` | `zh-CN` 与 `en-US` 资源 |
+| `windows-sandbox-broker` | Restricted Token、AppContainer、Job Object |
+
+## 6. 权限模式
+
+### 6.1 默认权限 `default`
+
+- 自动允许工作区只读操作、LSP 查询和 Git 状态。
+- 文件写入、进程执行、网络、浏览器交互和 Computer Use 必须询问。
+- 安全核心、密钥、系统目录和未认证应用操作直接拒绝。
+
+### 6.2 自动审核 `autoReview`
+
+- 只有规则能够证明安全时才允许。
+- 不能证明安全时停止并报告，不弹出自动继续选项。
+- 高权限 Tool/Skill 永不自动晋级。
+
+### 6.3 完全访问 `fullAccess`
+
+- 跳过普通操作询问。
+- 仍受沙箱、签名、路径边界、认证应用列表和不可变核心限制。
+- 不允许修改权限引擎、沙箱 Broker、签名系统和凭据系统。
+
+## 7. Computer Use 认证应用制度
+
+只有满足以下条件的应用才能进入认证列表：
+
+1. 可通过 Windows UI Automation 稳定获得元素树；
+2. 可获得稳定窗口标识、AutomationId 或可验证控件属性；
+3. 每个动作可定义动作前证据和动作后预期状态；
+4. 不涉及 UAC、安全桌面、密码框、支付或凭据管理；
+5. 已完成版本、语言、缩放比例和 DPI 测试；
+6. 已通过失败动作、窗口遮挡和焦点切换测试；
+7. 认证清单带签名和应用版本范围。
+
+第一批候选认证应用：
+
+- 本 IDE；
+- Windows 文件资源管理器；
+- 记事本；
+- 明确适配的标准 Win32/WPF/WinUI 企业应用。
+
+未认证应用只允许截图和 UI 树检查，不允许点击、输入或快捷键操作。
+
+## 8. 自进化策略
+
+### 8.1 可自动晋级
+
+- A 类：纯计算 Tool，无文件、网络、进程和随机副作用；
+- B 类：严格工作区只读 Tool，仅能使用受限 Workspace API。
+
+必须通过：
+
+- TypeScript 严格编译；
+- 静态安全分析；
+- 无未声明依赖；
+- 单元测试、属性测试、模糊测试；
+- 沙箱动态测试；
+- 输入输出范围检查；
+- 两个独立 Reviewer 审核；
+- 能力声明与实际行为一致性检查。
+
+### 8.2 不允许自动晋级
+
+以下 Tool/Skill 只能进入候选区：
+
+- 文件写入或删除；
+- 启动进程；
+- 访问局域网或互联网；
+- 浏览器点击、输入、上传和下载；
+- Computer Use；
+- Git 写操作；
+- 调用第三方依赖；
+- 修改工作流、Prompt 或子 Agent 权限。
+
+以下能力永远禁止生成或安装：
+
+- 修改权限引擎；
+- 修改沙箱 Broker；
+- 修改签名系统；
+- 修改密钥存储；
+- 修改自动更新器；
+- 修改自进化验证器本身。
+
+## 9. 低延迟代码补全
+
+补全系统与 Agent Runtime 完全分离。
+
+### 9.1 目标
+
+- 本地固定模型首个候选 P50 小于 120ms；
+- P95 小于 350ms；
+- 请求取消小于 20ms；
+- UI 主线程阻塞小于 8ms；
+- 不支持 FIM 或取消的模型不能启用为补全模型。
+
+### 9.2 请求上下文
+
+- 光标前 Prefix；
+- 光标后 Suffix；
+- 当前函数与 Import；
+- 最近编辑；
+- LSP 类型和 Diagnostics；
+- 项目规则摘要。
+
+不把完整仓库直接放入补全请求。
+
+## 10. Windows PowerShell 和沙箱
+
+### 10.1 PowerShell
+
+- 仅支持 PowerShell 7；
+- 使用 `pwsh -NoLogo -NoProfile -NonInteractive -Command -`；
+- 脚本经 stdin 传入；
+- 使用 PowerShell AST 分析，不使用简单正则判断安全；
+- 显式设置 UTF-8 输入输出；
+- 超时或中止必须终止整个进程树。
+
+### 10.2 Windows Sandbox Broker
+
+组合使用：
+
+- Restricted Token；
+- AppContainer；
+- Job Object；
+- 文件 ACL；
+- 网络 Capability；
+- 签名和审计日志。
+
+任何关键步骤失败都拒绝执行，不使用普通权限继续。
+
+## 11. 网络模式
+
+| 模式 | 允许范围 |
+|---|---|
+| `offline` | Loopback 和显式登记的本地模型端点 |
+| `lan` | Loopback、显式 CIDR 和内部域名 |
+| `internet` | 经统一 Egress Broker 审核的公网请求 |
+
+所有受控进程默认没有直接 Socket 能力。浏览器、Git、包管理器和搜索均通过 Egress Broker。
+
+## 12. 实施阶段
+
+### Phase 0：只读审计和新仓库基线
+
+置信度：98/100
+
+- 建立独立仓库；
+- 固化项目规则；
+- 生成 Claude Code 功能映射；
+- 建立 TypeScript strict 基线；
+- 建立 UTF-8、测试和 CI 规则；
+- 定义 Agent、Tool、Permission、Network、Computer Use 协议。
+
+### Phase 1：Code OSS 独立产品骨架
+
+置信度：92/100
+
+- 获取固定版本 Code OSS；
+- 重新命名和替换品牌；
+- 删除微软产品专用配置；
+- 添加 Agent Activity Bar、Chat、Task 和 Permission 容器；
+- 建立 Typed IPC。
+
+### Phase 2：自研 Agent Core
+
+置信度：93/100
+
+- AgentSession；
+- AgentLoop；
+- EventJournal；
+- Tool Call/Result；
+- 中断、恢复、最大轮次和预算；
+- OpenAI 兼容 Model Gateway。
+
+### Phase 3：工作区工具和 Diff
+
+置信度：91/100
+
+- Read、Write、Edit、ApplyPatch、Glob、Grep；
+- Git、LSP、Diagnostics；
+- Checkpoint；
+- Diff 接受和拒绝；
+- 文件冲突检测。
+
+### Phase 4：PowerShell 和 Windows 沙箱
+
+置信度：90/100，需安全原型通过后确认
+
+- PowerShell AST；
+- Sandbox Broker；
+- 进程树管理；
+- 路径、网络和凭据边界；
+- 红队和逃逸测试。
+
+### Phase 5：AI IDE 交互
+
+置信度：94/100
+
+- Agent Chat；
+- Plan Review；
+- Tool 卡片；
+- 权限窗口；
+- Diff Review；
+- 会话恢复；
+- 事件溯源 UI。
+
+### Phase 6：低延迟补全
+
+置信度：91/100
+
+- FIM Provider；
+- Inline Completion；
+- 请求取消；
+- 上下文缓存；
+- 性能基准；
+- 模型能力探测。
+
+### Phase 7：子 Agent
+
+置信度：92/100
+
+- Planner、Explorer、Implementer、Reviewer、Tester；
+- Worktree 隔离；
+- 预算和深度限制；
+- Patch 合并和测试。
+
+### Phase 8：网络、搜索和浏览器
+
+置信度：91/100
+
+- 三种网络模式；
+- Egress Broker；
+- WebSearch、WebFetch；
+- Playwright Chromium；
+- DOM、截图、下载和动作验证。
+
+### Phase 9：认证应用 Computer Use
+
+置信度：90/100
+
+- UI Automation Broker；
+- 应用认证清单；
+- 动作证据；
+- 动作后验证；
+- 未认证应用拒绝交互。
+
+### Phase 10：Tool/Skill 自进化
+
+置信度：低风险 Tool 91~95，高权限 Tool/Skill 不自动晋级
+
+- Capability Gap Detector；
+- Tool Forge；
+- Skill Forge；
+- Validator；
+- Candidate Registry；
+- Signed Whitelist；
+- 停用与回滚机制。
+
+### Phase 11：发布和本地化
+
+置信度：92/100
+
+- 中文、英文；
+- Windows 安装包；
+- 代码签名；
+- 原子更新；
+- E2E 和安全审计。
+
+## 13. 每次修改的强制流程
+
+1. 检索项目内相似实现；
+2. 说明复用内容和不复用原因；
+3. 列出影响文件；
+4. 复杂任务输出计划和置信度；
+5. 在新分支或 Worktree 修改；
+6. 使用 UTF-8；
+7. 删除重复逻辑；
+8. 不引入无必要依赖和抽象；
+9. 运行格式、Lint、TypeScript、测试、构建和启动；
+10. Bug 修复总结根因；
+11. 将可复用经验写入 `docs/lessons` 和 `PROJECT_RULES.md`。
+
+## 14. 合并门禁
+
+任何变更必须同时通过：
+
+- Format；
+- ESLint；
+- TypeScript strict；
+- Unit Test；
+- Integration Test；
+- Security Test；
+- PowerShell Test；
+- Network Policy Test；
+- Completion Benchmark；
+- Agent E2E；
+- IDE Smoke Test。
+
+禁止合并：
+
+- 硬编码密钥；
+- 静默 fallback；
+- 未声明网络；
+- 未受控进程；
+- 越界文件访问；
+- 高权限 Tool/Skill 自动晋级；
+- 未认证应用 Computer Use；
+- 吞掉错误的空 `catch`；
+- 无法取消的后台任务。
+
+## 15. 第一版验收标准
+
+1. 独立 Code OSS IDE 能安装和启动；
+2. OpenAI 兼容模型可配置；
+3. Agent 能执行多文件开发任务；
+4. 修改前展示影响文件和计划；
+5. Diff 可逐文件接受和拒绝；
+6. 支持 PowerShell 7；
+7. Shell 必须在 Windows 沙箱运行；
+8. 支持三种权限模式；
+9. 支持三种网络模式；
+10. 支持子 Agent 和后台任务；
+11. 支持搜索、内置浏览器和网页操作；
+12. Computer Use 仅限认证应用；
+13. 支持低延迟行内补全；
+14. 支持中文和英文；
+15. 支持 Checkpoint；
+16. 支持候选 Tool/Skill 生成；
+17. 高权限 Tool/Skill 不允许自动晋级；
+18. 不依赖 Claude Agent SDK；
+19. 不包含 Claude Code 源码；
+20. 不存在静默 fallback。
+
+## 16. 当前执行状态
+
+本计划生成时同步执行 Phase 0 基线：
+
+- [x] 创建全新 `ai-ide` 目录；
+- [x] 固化项目规则；
+- [x] 定义基础 TypeScript 协议；
+- [x] 建立高权限 Tool/Skill 禁止自动晋级策略；
+- [x] 建立 Computer Use 认证应用策略；
+- [x] 建立网络三模式策略；
+- [x] 建立编译和测试命令；
+- [x] 运行编译和测试；
+- [ ] 导入固定版本 Code OSS（已固定版本并执行获取；当前环境 DNS 失败）；
+- [x] 建立独立产品身份与 Overlay 清单；
+- [x] 建立 Agent、Task、Permission、Browser 容器骨架；
+- [x] 实现版本化 Typed IPC；
+- [ ] 在真实 Code OSS 上编译并启动 Workbench；
+- [ ] 实现 Windows 原生 Sandbox Broker；
