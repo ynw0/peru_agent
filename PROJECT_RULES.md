@@ -103,3 +103,18 @@
 - 补全接受指标必须按已交付 `requestId` 幂等记录，未知请求和重复事件不得污染接受率。
 - FIM 控制 Token、代码围栏、非法控制字符和与 Prefix/Suffix 重复的候选必须过滤。
 - 未通过真实模型和真实硬件基准前，不得宣称达到 P50、P95、取消或主线程延迟目标。
+
+## 子 Agent 规则
+
+- Planner、Explorer 和 Reviewer 必须只读；Implementer 只能在隔离工作区写入；Tester 不得继承父 Agent 权限。
+- 子 Agent Capability 必须同时限制模型可见 Tool、静态 Manifest、实际执行和 `inspect()` 动态能力。
+- 调度器选中任务时必须原子登记全局槽位、父会话槽位和 `AbortController`，之后才能执行异步准备工作。
+- 父会话取消必须覆盖尚未 `start()`、排队、调度准备中和运行中的全部子任务。
+- 同一 queued 任务重复 `start()` 必须幂等，禁止重复创建工作区或执行模型。
+- 隔离工作区必须限制允许路径、可写路径、文件数、总字节数，并绑定确定性根目录和 Workspace ID。
+- Reviewer 和 Tester 必须审核 Implementer 的精确隔离结果，禁止重新从父工作区创建无修改副本。
+- Implementer 结果必须同时通过 Reviewer 和 Tester，之后只能生成父工作区 Diff Proposal；用户接受前禁止写入父工作区。
+- 生成 Patch 前必须比较父工作区当前哈希与隔离基线，任一变化都停止合并。
+- queued/running 恢复时必须明确标记中断失败；持久化校验应允许可安全收敛的崩溃窗口中间状态。
+- 清理隔离目录后必须同时移除持久化 Worktree 引用，禁止重启时恢复失效路径。
+- Git Worktree 和 Git Tool 在 Windows Sandbox Broker 真机门禁完成前禁止启用，快照式隔离不得冒充 Git Worktree。

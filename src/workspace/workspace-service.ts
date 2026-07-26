@@ -262,6 +262,10 @@ export class WorkspaceRegistry {
     this.workspaces.set(workspace.workspaceId, workspace);
   }
 
+  public unregister(workspaceId: string): boolean {
+    return this.workspaces.delete(workspaceId);
+  }
+
   public get(workspaceId: string): WorkspaceService {
     const workspace = this.workspaces.get(workspaceId);
     if (workspace === undefined) {

@@ -155,6 +155,31 @@ export type AgentEvent =
   }
   | { type: "checkpoint.created"; sessionId: string; checkpointId: string; proposalId: string }
   | { type: "checkpoint.restored"; sessionId: string; checkpointId: string; affectedFiles: string[] }
+  | {
+    type: "subagent.task.created";
+    sessionId: string;
+    taskId: string;
+    role: "planner" | "explorer" | "implementer" | "reviewer" | "tester";
+    depth: number;
+  }
+  | { type: "subagent.task.started"; sessionId: string; taskId: string; workspaceId: string }
+  | {
+    type: "subagent.task.completed";
+    sessionId: string;
+    taskId: string;
+    role: "planner" | "explorer" | "implementer" | "reviewer" | "tester";
+    verdict?: "approved" | "rejected";
+  }
+  | { type: "subagent.task.failed"; sessionId: string; taskId: string; code: string; message: string }
+  | { type: "subagent.task.aborted"; sessionId: string; taskId: string }
+  | {
+    type: "subagent.patch.proposed";
+    sessionId: string;
+    taskId: string;
+    proposalId: string;
+    gateTaskIds: string[];
+  }
+  | { type: "subagent.task.merged"; sessionId: string; taskId: string; proposalId: string }
   | { type: "session.completed"; sessionId: string }
   | { type: "session.failed"; sessionId: string; code: string; message: string }
   | { type: "session.aborted"; sessionId: string };

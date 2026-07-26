@@ -9,7 +9,7 @@ import type { EventJournal } from "./event-journal.js";
 import type { IdGenerator } from "./id-generator.js";
 import { PermissionCoordinator, type AgentEventEmitter } from "./permission-coordinator.js";
 import type { AgentSession } from "./session.js";
-import type { AgentRunLimits, AgentSessionSnapshot, ToolAgentMessage } from "./types.js";
+import type { AgentRunLimits, AgentRunOptions, AgentSessionSnapshot, ToolAgentMessage } from "./types.js";
 
 export interface AgentLoopOptions {
   readonly systemPrompt: string;
@@ -46,8 +46,11 @@ export class AgentLoop {
     session: AgentSession,
     userInput: string,
     signal: AbortSignal,
+    runOptions: AgentRunOptions = {},
   ): Promise<AgentSessionSnapshot> {
     const emit = this.createEmitter(session);
+    const limits = runOptions.limits ?? this.options.limits;
+    validateLimits(limits);
 
     try {
       if (userInput.trim() === "") {
@@ -69,7 +72,7 @@ export class AgentLoop {
       });
 
       let toolCallCount = 0;
-      for (let turn = 1; turn <= this.options.limits.maxTurns; turn += 1) {
+      for (let turn = 1; turn <= limits.maxTurns; turn += 1) {
         this.assertNotAborted(signal);
         await emit({ type: "model.started", sessionId: session.id, turn });
 
@@ -86,6 +89,7 @@ export class AgentLoop {
           assistantMessageId,
           emit,
           signal,
+          runOptions,
         );
         session.addUsage(response.usage.inputTokens, response.usage.outputTokens);
         await emit({
@@ -94,10 +98,10 @@ export class AgentLoop {
           inputTokens: session.snapshot().usage.inputTokens,
           outputTokens: session.snapshot().usage.outputTokens,
         });
-        if (session.getTotalTokens() > this.options.limits.maxTotalTokens) {
+        if (session.getTotalTokens() > limits.maxTotalTokens) {
           throw new AgentError(
             "TOKEN_BUDGET_EXCEEDED",
-            `会话 Token 用量 ${session.getTotalTokens()} 超过限制 ${this.options.limits.maxTotalTokens}`,
+            `会话 Token 用量 ${session.getTotalTokens()} 超过限制 ${limits.maxTotalTokens}`,
           );
         }
 
@@ -129,16 +133,16 @@ export class AgentLoop {
         }
 
         toolCallCount += response.toolCalls.length;
-        if (toolCallCount > this.options.limits.maxToolCalls) {
+        if (toolCallCount > limits.maxToolCalls) {
           throw new AgentError(
             "MAX_TOOL_CALLS_EXCEEDED",
-            `ToolCall 数量 ${toolCallCount} 超过限制 ${this.options.limits.maxToolCalls}`,
+            `ToolCall 数量 ${toolCallCount} 超过限制 ${limits.maxToolCalls}`,
           );
         }
 
         for (const toolCall of response.toolCalls) {
           this.assertNotAborted(signal);
-          const toolResult = await this.executeTool(session, toolCall, emit, signal);
+          const toolResult = await this.executeTool(session, toolCall, emit, signal, runOptions);
           session.appendMessage(toolResult);
           await this.persist(session);
         }
@@ -146,7 +150,7 @@ export class AgentLoop {
 
       throw new AgentError(
         "MAX_TURNS_EXCEEDED",
-        `Agent 达到最大轮次 ${this.options.limits.maxTurns}，未得到最终回答`,
+        `Agent 达到最大轮次 ${limits.maxTurns}，未得到最终回答`,
       );
     } catch (error: unknown) {
       if (signal.aborted || (error instanceof AgentError && error.code === "RUN_ABORTED")) {
@@ -179,6 +183,7 @@ export class AgentLoop {
     assistantMessageId: string,
     emit: AgentEventEmitter,
     signal: AbortSignal,
+    runOptions: AgentRunOptions,
   ): Promise<AssembledModelResponse> {
     const assembler = new ToolCallAssembler();
     let text = "";
@@ -190,7 +195,8 @@ export class AgentLoop {
     for await (const event of this.dependencies.provider.stream({
       systemPrompt: this.options.systemPrompt,
       messages: session.getMessages(),
-      tools: this.dependencies.tools.listModelDefinitions(),
+      tools: this.dependencies.tools.listModelDefinitions(manifest =>
+        this.isManifestAllowed(manifest.capabilities, runOptions)),
       maxOutputTokens: this.options.maxOutputTokensPerTurn,
     }, signal)) {
       this.assertNotAborted(signal);
@@ -230,8 +236,20 @@ export class AgentLoop {
     toolCall: { readonly id: string; readonly name: string; readonly arguments: unknown },
     emit: AgentEventEmitter,
     signal: AbortSignal,
+    runOptions: AgentRunOptions,
   ): Promise<ToolAgentMessage> {
     const tool = this.dependencies.tools.get(toolCall.name);
+    if (tool !== undefined && !this.isManifestAllowed(tool.manifest.capabilities, runOptions)) {
+      await emit({
+        type: "tool.completed",
+        sessionId: session.id,
+        toolName: toolCall.name,
+        toolCallId: toolCall.id,
+        success: false,
+      });
+      return this.createToolError(toolCall, `子 Agent 运行策略拒绝 Tool：${toolCall.name}`);
+    }
+
     if (tool === undefined) {
       await emit({
         type: "tool.completed",
@@ -272,6 +290,13 @@ export class AgentLoop {
     try {
       const inspection = await tool.inspect(input, inspectionContext);
       inspectionCompleted = true;
+      const effectiveCapabilities = [
+        ...tool.manifest.capabilities,
+        ...(inspection.requestedCapabilities ?? []),
+      ];
+      if (!this.isManifestAllowed(effectiveCapabilities, runOptions)) {
+        throw new Error(`子 Agent 运行策略拒绝动态能力：${effectiveCapabilities.join(", ")}`);
+      }
       await emit({
         type: "tool.inspected",
         sessionId: session.id,
@@ -374,6 +399,17 @@ export class AgentLoop {
       toolCallId: toolCall.id,
       success,
     });
+  }
+
+  private isManifestAllowed(
+    capabilities: readonly import("../agent-protocol.js").Capability[],
+    runOptions: AgentRunOptions,
+  ): boolean {
+    if (runOptions.allowedCapabilities === undefined) {
+      return true;
+    }
+    const allowed = new Set(runOptions.allowedCapabilities);
+    return capabilities.every(capability => allowed.has(capability));
   }
 
   private createEmitter(session: AgentSession): AgentEventEmitter {

@@ -1,4 +1,4 @@
-import type { PermissionMode } from "../agent-protocol.js";
+import type { Capability, PermissionMode } from "../agent-protocol.js";
 
 // ToolCall 是模型提出的结构化工具调用；arguments 必须是已经解析完成的 JSON 对象。
 export interface ToolCall {
@@ -67,4 +67,14 @@ export interface AgentRunLimits {
   readonly maxTurns: number;
   readonly maxToolCalls: number;
   readonly maxTotalTokens: number;
+}
+
+
+export interface AgentRunPolicy {
+  readonly allowedCapabilities?: readonly Capability[];
+}
+
+export interface AgentRunOptions {
+  readonly limits?: AgentRunLimits;
+  readonly allowedCapabilities?: readonly Capability[];
 }

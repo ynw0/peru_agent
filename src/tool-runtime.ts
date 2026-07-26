@@ -104,8 +104,11 @@ export class ToolRegistry {
     return this.tools.get(name);
   }
 
-  public listModelDefinitions(): readonly ModelToolDefinition[] {
+  public listModelDefinitions(
+    predicate: (manifest: ToolManifest) => boolean = () => true,
+  ): readonly ModelToolDefinition[] {
     return [...this.tools.values()]
+      .filter(tool => predicate(tool.manifest))
       .sort((left, right) => left.manifest.name.localeCompare(right.manifest.name))
       .map(tool => ({
         name: tool.manifest.name,

@@ -10,6 +10,7 @@ import type { WorkbenchSnapshot } from "../workbench/workbench-state.js";
 import type { CheckpointRecord } from "../checkpoint/checkpoint-manager.js";
 import type { DiffProposal } from "../diff/diff-manager.js";
 import type { PlanRecord } from "../plan/plan-manager.js";
+import type { SubagentTaskRecord, SubagentTaskRequest } from "../subagent/types.js";
 import type { WorkspaceFileSnapshot } from "../workspace/types.js";
 import type {
   CompletionCandidate,
@@ -19,7 +20,7 @@ import type {
 } from "../completion/types.js";
 
 // IPC 协议版本必须显式匹配；版本不一致时拒绝连接，不做隐式兼容。
-export const IPC_PROTOCOL_VERSION = 3 as const;
+export const IPC_PROTOCOL_VERSION = 4 as const;
 
 export interface RuntimeInitializeRequest {
   readonly protocolVersion: typeof IPC_PROTOCOL_VERSION;
@@ -136,6 +137,21 @@ export interface CompletionAcceptedRequest {
   readonly requestId: string;
 }
 
+export interface DispatchSubagentRequest extends SubagentTaskRequest {}
+
+export interface SubagentTaskRequestById {
+  readonly taskId: string;
+}
+
+export interface ListSubagentsRequest {
+  readonly parentSessionId?: string;
+}
+
+export interface ProposeSubagentMergeRequest {
+  readonly taskId: string;
+  readonly gateTaskIds: readonly string[];
+}
+
 
 // 请求方法表同时定义参数和返回值，是 Typed IPC 的唯一事实来源。
 export interface IpcRequestMap {
@@ -242,6 +258,34 @@ export interface IpcRequestMap {
   readonly "completion.clearCache": {
     readonly params: Record<string, never>;
     readonly result: { readonly cleared: true };
+  };
+  readonly "subagent.dispatch": {
+    readonly params: DispatchSubagentRequest;
+    readonly result: SubagentTaskRecord;
+  };
+  readonly "subagent.start": {
+    readonly params: SubagentTaskRequestById;
+    readonly result: { readonly started: true };
+  };
+  readonly "subagent.abort": {
+    readonly params: SubagentTaskRequestById;
+    readonly result: { readonly aborted: boolean };
+  };
+  readonly "subagent.get": {
+    readonly params: SubagentTaskRequestById;
+    readonly result: SubagentTaskRecord;
+  };
+  readonly "subagent.list": {
+    readonly params: ListSubagentsRequest;
+    readonly result: { readonly tasks: readonly SubagentTaskRecord[] };
+  };
+  readonly "subagent.proposeMerge": {
+    readonly params: ProposeSubagentMergeRequest;
+    readonly result: SubagentTaskRecord;
+  };
+  readonly "subagent.finalizeMerge": {
+    readonly params: SubagentTaskRequestById;
+    readonly result: SubagentTaskRecord;
   };
 }
 

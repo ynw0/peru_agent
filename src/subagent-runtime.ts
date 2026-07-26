@@ -1,6 +1,10 @@
-// 子 Agent 默认最多两层，防止无限递归生成任务。
-export const MAX_SUBAGENT_DEPTH = 2;
+import type { Capability } from "./agent-protocol.js";
+import { validateSubagentTaskRequest } from "./subagent/policy.js";
+import { MAX_SUBAGENT_DEPTH, type SubagentTaskRequest } from "./subagent/types.js";
 
+export { MAX_SUBAGENT_DEPTH };
+
+// 保留稳定的基础 Assignment 接口，并将校验委托给 Phase 8 的完整策略。
 export interface SubagentAssignment {
   readonly depth: number;
   readonly allowedPaths: readonly string[];
@@ -9,18 +13,33 @@ export interface SubagentAssignment {
   readonly maxTurns: number;
 }
 
-// 子 Agent 创建前执行硬性验证。
 export function validateSubagentAssignment(assignment: SubagentAssignment): void {
-  if (assignment.depth < 1 || assignment.depth > MAX_SUBAGENT_DEPTH) {
-    throw new Error(`子 Agent 深度必须在 1 到 ${MAX_SUBAGENT_DEPTH} 之间`);
-  }
-  if (assignment.tokenBudget <= 0 || assignment.maxTurns <= 0) {
-    throw new Error("子 Agent 预算和最大轮次必须大于 0");
-  }
-  const invalidWritablePath = assignment.writablePaths.find(
-    writablePath => !assignment.allowedPaths.includes(writablePath),
-  );
-  if (invalidWritablePath !== undefined) {
-    throw new Error(`可写路径不在允许路径中：${invalidWritablePath}`);
-  }
+  const capabilities: Capability[] = assignment.writablePaths.length === 0
+    ? ["workspace.read"]
+    : ["workspace.read", "workspace.write"];
+  const request: SubagentTaskRequest = {
+    parentSessionId: "validation",
+    role: assignment.writablePaths.length === 0 ? "explorer" : "implementer",
+    instruction: "validation",
+    depth: assignment.depth,
+    baseWorkspaceId: "validation",
+    allowedPaths: assignment.allowedPaths,
+    writablePaths: assignment.writablePaths,
+    allowedCapabilities: capabilities,
+    budget: {
+      maxTurns: assignment.maxTurns,
+      maxToolCalls: assignment.maxTurns,
+      maxTotalTokens: assignment.tokenBudget,
+      maxDurationMs: 60_000,
+    },
+  };
+  validateSubagentTaskRequest(request);
 }
+
+export * from "./subagent/types.js";
+export * from "./subagent/policy.js";
+export * from "./subagent/task-store.js";
+export * from "./subagent/worktree-manager.js";
+export * from "./subagent/patch-merger.js";
+export * from "./subagent/executor.js";
+export * from "./subagent/scheduler.js";

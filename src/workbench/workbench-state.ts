@@ -61,6 +61,17 @@ export interface CheckpointView {
   readonly restored: boolean;
 }
 
+export interface SubagentTaskView {
+  readonly taskId: string;
+  readonly role: "planner" | "explorer" | "implementer" | "reviewer" | "tester";
+  readonly depth: number;
+  readonly status: "queued" | "running" | "completed" | "failed" | "aborted" | "patchProposed" | "merged";
+  readonly workspaceId?: string;
+  readonly verdict?: "approved" | "rejected";
+  readonly proposalId?: string;
+  readonly error?: { readonly code: string; readonly message: string };
+}
+
 // WorkbenchSnapshot 是 UI 可恢复状态；UI 组件不得各自维护另一份事实来源。
 export interface WorkbenchSnapshot {
   readonly activeSessionId?: string;
@@ -73,6 +84,7 @@ export interface WorkbenchSnapshot {
   readonly tools: readonly ToolActivityView[];
   readonly diffProposals: readonly DiffProposalView[];
   readonly checkpoints: readonly CheckpointView[];
+  readonly subagents: readonly SubagentTaskView[];
   readonly usage: {
     readonly inputTokens: number;
     readonly outputTokens: number;
@@ -91,6 +103,7 @@ export const EMPTY_WORKBENCH_SNAPSHOT: WorkbenchSnapshot = {
   tools: [],
   diffProposals: [],
   checkpoints: [],
+  subagents: [],
   usage: { inputTokens: 0, outputTokens: 0 },
   completed: false,
   aborted: false,
@@ -113,6 +126,7 @@ export function projectWorkbenchSnapshot(
         tools: [],
         diffProposals: [],
         checkpoints: [],
+        subagents: [],
         usage: { inputTokens: 0, outputTokens: 0 },
         completed: false,
         aborted: false,
@@ -328,6 +342,69 @@ export function projectWorkbenchSnapshot(
             ? { ...checkpoint, restored: true }
             : checkpoint),
       };
+    case "subagent.task.created":
+      return {
+        ...current,
+        subagents: [
+          ...current.subagents,
+          {
+            taskId: event.taskId,
+            role: event.role,
+            depth: event.depth,
+            status: "queued",
+          },
+        ],
+      };
+    case "subagent.task.started":
+      return {
+        ...current,
+        subagents: updateSubagent(current.subagents, event.taskId, task => ({
+          ...task,
+          status: "running",
+          workspaceId: event.workspaceId,
+        })),
+      };
+    case "subagent.task.completed":
+      return {
+        ...current,
+        subagents: updateSubagent(current.subagents, event.taskId, task => ({
+          ...task,
+          status: "completed",
+          ...(event.verdict === undefined ? {} : { verdict: event.verdict }),
+        })),
+      };
+    case "subagent.task.failed":
+      return {
+        ...current,
+        subagents: updateSubagent(current.subagents, event.taskId, task => ({
+          ...task,
+          status: "failed",
+          error: { code: event.code, message: event.message },
+        })),
+      };
+    case "subagent.task.aborted":
+      return {
+        ...current,
+        subagents: updateSubagent(current.subagents, event.taskId, task => ({ ...task, status: "aborted" })),
+      };
+    case "subagent.patch.proposed":
+      return {
+        ...current,
+        subagents: updateSubagent(current.subagents, event.taskId, task => ({
+          ...task,
+          status: "patchProposed",
+          proposalId: event.proposalId,
+        })),
+      };
+    case "subagent.task.merged":
+      return {
+        ...current,
+        subagents: updateSubagent(current.subagents, event.taskId, task => ({
+          ...task,
+          status: "merged",
+          proposalId: event.proposalId,
+        })),
+      };
     case "session.completed":
       return {
         ...withoutActiveRun(current),
@@ -349,6 +426,25 @@ export function projectWorkbenchSnapshot(
         completed: false,
       };
   }
+}
+
+function updateSubagent(
+  tasks: readonly SubagentTaskView[],
+  taskId: string,
+  updater: (task: SubagentTaskView) => SubagentTaskView,
+): readonly SubagentTaskView[] {
+  let found = false;
+  const updated = tasks.map(task => {
+    if (task.taskId !== taskId) {
+      return task;
+    }
+    found = true;
+    return updater(task);
+  });
+  if (!found) {
+    throw new Error(`Workbench 收到未知子 Agent 任务事件：${taskId}`);
+  }
+  return updated;
 }
 
 function updateTool(

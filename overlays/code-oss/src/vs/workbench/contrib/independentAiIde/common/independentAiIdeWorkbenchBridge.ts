@@ -58,6 +58,16 @@ export interface IndependentAiIdeCheckpointView {
 	readonly restored: boolean;
 }
 
+export interface IndependentAiIdeSubagentView {
+	readonly taskId: string;
+	readonly role: 'planner' | 'explorer' | 'implementer' | 'reviewer' | 'tester';
+	readonly depth: number;
+	readonly status: 'queued' | 'running' | 'completed' | 'failed' | 'aborted' | 'patchProposed' | 'merged';
+	readonly verdict?: 'approved' | 'rejected';
+	readonly proposalId?: string;
+	readonly error?: { readonly code: string; readonly message: string };
+}
+
 export interface IndependentAiIdeWorkbenchSnapshot {
 	readonly activeSessionId?: string;
 	readonly sessionStatus: IndependentAiIdeSessionStatus;
@@ -67,6 +77,7 @@ export interface IndependentAiIdeWorkbenchSnapshot {
 	readonly pendingPermissions: readonly IndependentAiIdePermissionView[];
 	readonly diffProposals: readonly IndependentAiIdeDiffView[];
 	readonly checkpoints: readonly IndependentAiIdeCheckpointView[];
+	readonly subagents: readonly IndependentAiIdeSubagentView[];
 	readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
 	readonly failed?: { readonly code: string; readonly message: string };
 }

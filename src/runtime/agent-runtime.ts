@@ -5,7 +5,7 @@ import type { IdGenerator } from "../agent/id-generator.js";
 import { AgentLoop, type AgentLoopOptions } from "../agent/agent-loop.js";
 import { PermissionCoordinator } from "../agent/permission-coordinator.js";
 import { AgentSession } from "../agent/session.js";
-import type { AgentSessionSnapshot } from "../agent/types.js";
+import type { AgentRunOptions, AgentSessionSnapshot } from "../agent/types.js";
 import type { ModelProvider } from "../model/types.js";
 import type { SessionStore } from "../storage/session-store.js";
 import type { ToolRegistry } from "../tool-runtime.js";
@@ -70,7 +70,11 @@ export class AgentRuntime {
     return session.snapshot();
   }
 
-  public async startSession(sessionId: string, input: string): Promise<{ runId: string }> {
+  public async startSession(
+    sessionId: string,
+    input: string,
+    runOptions: AgentRunOptions = {},
+  ): Promise<{ runId: string }> {
     const session = await this.requireSession(sessionId);
     if (session.getStatus() === "running" || session.getStatus() === "awaitingPermission") {
       throw new AgentError("RUN_ALREADY_ACTIVE", `会话已有运行任务：${sessionId}`);
@@ -84,7 +88,7 @@ export class AgentRuntime {
     await this.dependencies.journal.append(startedEvent);
     await this.emit(startedEvent);
 
-    const promise = this.loop.run(session, input, controller.signal).finally(() => {
+    const promise = this.loop.run(session, input, controller.signal, runOptions).finally(() => {
       this.runControllers.delete(runId);
     });
     this.runControllers.set(runId, controller);

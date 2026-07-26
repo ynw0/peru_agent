@@ -42,6 +42,13 @@ const REQUEST_METHODS: ReadonlySet<string> = new Set<IpcRequestMethod>([
   "completion.accepted",
   "completion.metrics",
   "completion.clearCache",
+  "subagent.dispatch",
+  "subagent.start",
+  "subagent.abort",
+  "subagent.get",
+  "subagent.list",
+  "subagent.proposeMerge",
+  "subagent.finalizeMerge",
 ]);
 
 const EVENT_METHODS: ReadonlySet<string> = new Set<IpcEventMethod>([
@@ -140,6 +147,20 @@ export function isRequestParams(method: IpcRequestMethod, value: unknown): boole
       return hasOnlyKeys(value, ["input"]) && isCompletionDocumentInput(value.input);
     case "completion.accepted":
       return hasOnlyKeys(value, ["requestId"]) && isNonEmptyString(value.requestId);
+    case "subagent.dispatch":
+      return isSubagentTaskRequest(value);
+    case "subagent.start":
+    case "subagent.abort":
+    case "subagent.get":
+    case "subagent.finalizeMerge":
+      return hasOnlyKeys(value, ["taskId"]) && isNonEmptyString(value.taskId);
+    case "subagent.list":
+      return hasOnlyKeys(value, ["parentSessionId"]) && isOptionalNonEmptyString(value.parentSessionId);
+    case "subagent.proposeMerge":
+      return hasOnlyKeys(value, ["taskId", "gateTaskIds"])
+        && isNonEmptyString(value.taskId)
+        && isStringArray(value.gateTaskIds)
+        && value.gateTaskIds.length >= 2;
   }
 }
 
@@ -197,7 +218,138 @@ export function isResponseResult(method: IpcRequestMethod, value: unknown): bool
       return isCompletionMetricsSnapshot(value);
     case "completion.clearCache":
       return isRecord(value) && value.cleared === true;
+    case "subagent.dispatch":
+    case "subagent.get":
+    case "subagent.proposeMerge":
+    case "subagent.finalizeMerge":
+      return isSubagentTaskRecord(value);
+    case "subagent.start":
+      return isRecord(value) && value.started === true;
+    case "subagent.abort":
+      return isRecord(value) && typeof value.aborted === "boolean";
+    case "subagent.list":
+      return isRecord(value) && Array.isArray(value.tasks) && value.tasks.every(isSubagentTaskRecord);
   }
+}
+
+function isSubagentRole(value: unknown): boolean {
+  return value === "planner" || value === "explorer" || value === "implementer"
+    || value === "reviewer" || value === "tester";
+}
+
+function isSubagentTaskStatus(value: unknown): boolean {
+  return value === "queued" || value === "running" || value === "completed"
+    || value === "failed" || value === "aborted" || value === "patchProposed" || value === "merged";
+}
+
+function isPositiveInteger(value: unknown): boolean {
+  return Number.isInteger(value) && Number(value) > 0;
+}
+
+function isSubagentBudget(value: unknown): boolean {
+  return isRecord(value)
+    && hasOnlyKeys(value, ["maxTurns", "maxToolCalls", "maxTotalTokens", "maxDurationMs"])
+    && isPositiveInteger(value.maxTurns)
+    && isPositiveInteger(value.maxToolCalls)
+    && isPositiveInteger(value.maxTotalTokens)
+    && isPositiveInteger(value.maxDurationMs);
+}
+
+function hasSubagentTaskFields(value: Record<string, unknown>): boolean {
+  return isNonEmptyString(value.parentSessionId)
+    && (value.parentTaskId === undefined || isNonEmptyString(value.parentTaskId))
+    && isSubagentRole(value.role)
+    && isNonEmptyString(value.instruction)
+    && isPositiveInteger(value.depth)
+    && isNonEmptyString(value.baseWorkspaceId)
+    && isStringArray(value.allowedPaths)
+    && value.allowedPaths.length > 0
+    && isStringArray(value.writablePaths)
+    && isStringArray(value.allowedCapabilities)
+    && isSubagentBudget(value.budget)
+    && (value.targetTaskId === undefined || isNonEmptyString(value.targetTaskId));
+}
+
+function isSubagentTaskRequest(value: unknown): boolean {
+  return isRecord(value)
+    && hasOnlyKeys(value, [
+      "parentSessionId", "parentTaskId", "role", "instruction", "depth", "baseWorkspaceId",
+      "allowedPaths", "writablePaths", "allowedCapabilities", "budget", "targetTaskId",
+    ])
+    && hasSubagentTaskFields(value);
+}
+
+function isSubagentUsage(value: unknown): boolean {
+  return isRecord(value)
+    && isNonNegativeInteger(value.inputTokens)
+    && isNonNegativeInteger(value.outputTokens)
+    && isNonNegativeInteger(value.turns)
+    && isNonNegativeInteger(value.toolCalls);
+}
+
+function isSubagentExecutionResult(value: unknown): boolean {
+  return isRecord(value)
+    && typeof value.summary === "string"
+    && isSubagentUsage(value.usage)
+    && (value.childSessionId === undefined || isNonEmptyString(value.childSessionId))
+    && (value.verdict === undefined || value.verdict === "approved" || value.verdict === "rejected");
+}
+
+function isSubagentWorktree(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && isNonEmptyString(value.taskId)
+    && isNonEmptyString(value.baseWorkspaceId)
+    && isNonEmptyString(value.workspaceId)
+    && isNonEmptyString(value.root)
+    && isStringArray(value.allowedPaths)
+    && isStringArray(value.writablePaths)
+    && Array.isArray(value.baseFiles)
+    && value.baseFiles.every(isWorkspaceFileSnapshot)
+    && isNonEmptyString(value.createdAt);
+}
+
+function isSubagentTaskRecord(value: unknown): boolean {
+  if (!isRecord(value)
+    || !hasSubagentTaskFields(value)
+    || !isNonEmptyString(value.id)
+    || !isSubagentTaskStatus(value.status)
+    || !isNonEmptyString(value.createdAt)
+    || !isNonEmptyString(value.updatedAt)
+    || (value.worktree !== undefined && !isSubagentWorktree(value.worktree))
+    || (value.result !== undefined && !isSubagentExecutionResult(value.result))
+    || (value.patchProposalId !== undefined && !isNonEmptyString(value.patchProposalId))
+    || (value.error !== undefined && (!isRecord(value.error)
+      || !isNonEmptyString(value.error.code)
+      || !isNonEmptyString(value.error.message)))) {
+    return false;
+  }
+
+  if ((value.status === "completed" || value.status === "patchProposed" || value.status === "merged")
+    && value.result === undefined) {
+    return false;
+  }
+  if ((value.status === "patchProposed" || value.status === "merged")
+    && value.patchProposalId === undefined) {
+    return false;
+  }
+  if ((value.status === "failed" || value.status === "aborted") && value.error === undefined) {
+    return false;
+  }
+  if (value.role === "implementer" && (value.status === "completed" || value.status === "patchProposed")
+    && value.worktree === undefined) {
+    return false;
+  }
+  if (value.status === "merged" && value.worktree !== undefined) {
+    return false;
+  }
+  if (isRecord(value.worktree)
+    && (value.worktree.taskId !== value.id
+      || value.worktree.id !== `worktree:${value.id}`
+      || value.worktree.workspaceId !== `subagent:${value.id}`)) {
+    return false;
+  }
+  return true;
 }
 
 function isAgentSessionSnapshot(value: unknown): boolean {
@@ -374,6 +526,19 @@ function isWorkbenchSnapshot(value: unknown): boolean {
       && isNonEmptyString(checkpoint.checkpointId)
       && (checkpoint.proposalId === undefined || isNonEmptyString(checkpoint.proposalId))
       && typeof checkpoint.restored === "boolean")
+    && Array.isArray(value.subagents)
+    && value.subagents.every(task => isRecord(task)
+      && isNonEmptyString(task.taskId)
+      && isSubagentRole(task.role)
+      && Number.isInteger(task.depth)
+      && Number(task.depth) > 0
+      && isSubagentTaskStatus(task.status)
+      && (task.workspaceId === undefined || isNonEmptyString(task.workspaceId))
+      && (task.verdict === undefined || task.verdict === "approved" || task.verdict === "rejected")
+      && (task.proposalId === undefined || isNonEmptyString(task.proposalId))
+      && (task.error === undefined || (isRecord(task.error)
+        && isNonEmptyString(task.error.code)
+        && isNonEmptyString(task.error.message))))
     && isRecord(value.usage)
     && isNonNegativeInteger(value.usage.inputTokens)
     && isNonNegativeInteger(value.usage.outputTokens)
@@ -474,6 +639,27 @@ function isAgentEvent(value: unknown): boolean {
       return isNonEmptyString(value.checkpointId) && isNonEmptyString(value.proposalId);
     case "checkpoint.restored":
       return isNonEmptyString(value.checkpointId) && isStringArray(value.affectedFiles);
+    case "subagent.task.created":
+      return isNonEmptyString(value.taskId)
+        && (value.role === "planner" || value.role === "explorer" || value.role === "implementer"
+          || value.role === "reviewer" || value.role === "tester")
+        && Number.isInteger(value.depth) && Number(value.depth) > 0;
+    case "subagent.task.started":
+      return isNonEmptyString(value.taskId) && isNonEmptyString(value.workspaceId);
+    case "subagent.task.completed":
+      return isNonEmptyString(value.taskId)
+        && (value.role === "planner" || value.role === "explorer" || value.role === "implementer"
+          || value.role === "reviewer" || value.role === "tester")
+        && (value.verdict === undefined || value.verdict === "approved" || value.verdict === "rejected");
+    case "subagent.task.failed":
+      return isNonEmptyString(value.taskId) && isNonEmptyString(value.code) && isNonEmptyString(value.message);
+    case "subagent.task.aborted":
+      return isNonEmptyString(value.taskId);
+    case "subagent.patch.proposed":
+      return isNonEmptyString(value.taskId) && isNonEmptyString(value.proposalId)
+        && isStringArray(value.gateTaskIds);
+    case "subagent.task.merged":
+      return isNonEmptyString(value.taskId) && isNonEmptyString(value.proposalId);
     case "session.completed":
     case "session.aborted":
       return true;

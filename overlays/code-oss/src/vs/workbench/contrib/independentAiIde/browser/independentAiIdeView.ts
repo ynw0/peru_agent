@@ -181,6 +181,19 @@ export class IndependentAiIdeView extends ViewPane {
 			root.appendChild(card);
 		}
 
+		root.appendChild(createHeading('子 Agent'));
+		for (const task of snapshot.subagents) {
+			const details = [
+				`角色：${task.role}`,
+				`深度：${task.depth}`,
+				`状态：${task.status}`,
+				task.verdict === undefined ? '' : `结论：${task.verdict}`,
+				task.proposalId === undefined ? '' : `Diff：${task.proposalId}`,
+				task.error === undefined ? '' : `错误：${task.error.code} ${task.error.message}`,
+			].filter(Boolean).join('\n');
+			root.appendChild(createCard(task.taskId, details));
+		}
+
 		root.appendChild(createHeading('Tool 调用'));
 		for (const tool of snapshot.tools) {
 			const details = `${tool.description}\n风险：${tool.riskLevel}\n状态：${tool.state}`;

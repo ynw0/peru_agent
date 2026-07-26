@@ -350,12 +350,23 @@ Windows Native Brokers
 
 ### Phase 8：子 Agent
 
-置信度：92/100
+置信度：91/100
 
-- Planner、Explorer、Implementer、Reviewer、Tester；
-- Worktree 隔离；
-- 预算和深度限制；
-- Patch 合并和测试。
+- [x] Planner、Explorer、Implementer、Reviewer、Tester；
+- [x] 全局与父会话并发调度；
+- [x] 最大深度、轮次、ToolCall、Token 和时长预算；
+- [x] 父会话取消传播和重复启动幂等；
+- [x] 快照式隔离工作区、路径和容量边界；
+- [x] 模型 Tool 列表、执行阶段和动态 Capability 三重限制；
+- [x] Reviewer 和 Tester 基于 Implementer 精确结果审核；
+- [x] Reviewer + Tester 双门禁；
+- [x] 父工作区哈希冲突检测；
+- [x] Diff Proposal 接受后完成合并；
+- [x] JSON 持久化、中断恢复和 Workbench 事件投影；
+- [x] Typed IPC Version 4；
+- [ ] Windows Sandbox Broker 后的真实 Git Worktree Backend；
+- [ ] 子 Agent 真实模型、并发和长任务压力测试；
+- [ ] 生产 IPC Transport 安装。
 
 ### Phase 9：网络、搜索和浏览器
 
@@ -477,6 +488,7 @@ Windows Native Brokers
 - [ ] 全局门禁：在 Windows 11 x64 编译并红队验证 Windows Sandbox Broker；
 - [ ] 全局门禁：安装主进程到独立 Agent Runtime 的生产 IPC Transport；
 - [x] Phase 7：低延迟 FIM 代码补全 Runtime、缓存、取消、指标和 Code OSS Inline Completion Overlay；
-- [ ] Phase 8：子 Agent；
+- [x] Phase 8：子 Agent 调度、预算、快照隔离、Reviewer/Tester 门禁和 Patch 合并；
 - [ ] Phase 9：网络、搜索和浏览器；
-- [ ] Phase 10：认证应用 Computer Use、自进化、发布与强化。
+- [ ] Phase 10：认证应用 Computer Use；
+- [ ] Phase 11：Tool/Skill 自进化、发布与强化。
