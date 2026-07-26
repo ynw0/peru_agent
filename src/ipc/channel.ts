@@ -13,6 +13,7 @@ import { isIpcMessage, isResponseResult } from "./validation.js";
 
 type RequestHandler<Method extends IpcRequestMethod> = (
   params: IpcRequestMap[Method]["params"],
+  signal: AbortSignal,
 ) => Promise<IpcRequestMap[Method]["result"]> | IpcRequestMap[Method]["result"];
 
 interface PendingRequest {
@@ -61,6 +62,7 @@ export class TypedIpcClient {
         const pending = this.pending.get(id);
         pending?.abortCleanup?.();
         this.pending.delete(id);
+        this.transport.send({ kind: "cancel", id });
         reject(new IpcError("REQUEST_TIMEOUT", `IPC 请求超时：${method}`));
       }, options.timeoutMs);
 
@@ -71,6 +73,7 @@ export class TypedIpcClient {
         }
         clearTimeout(pending.timeoutHandle);
         this.pending.delete(id);
+        this.transport.send({ kind: "cancel", id });
         reject(new IpcError("REQUEST_ABORTED", `IPC 请求已取消：${method}`));
       };
 
@@ -109,9 +112,10 @@ export class TypedIpcClient {
 
   public dispose(): void {
     this.transportSubscription.dispose();
-    for (const pending of this.pending.values()) {
+    for (const [id, pending] of this.pending) {
       clearTimeout(pending.timeoutHandle);
       pending.abortCleanup?.();
+      this.transport.send({ kind: "cancel", id });
       pending.reject(new IpcError("REQUEST_ABORTED", "IPC Client 已关闭"));
     }
     this.pending.clear();
@@ -159,7 +163,8 @@ export class TypedIpcClient {
 
 // Server 只执行已注册方法；未注册方法返回明确错误。
 export class TypedIpcServer {
-  private readonly handlers = new Map<IpcRequestMethod, (params: unknown) => Promise<unknown>>();
+  private readonly handlers = new Map<IpcRequestMethod, (params: unknown, signal: AbortSignal) => Promise<unknown>>();
+  private readonly activeRequests = new Map<string, AbortController>();
   private readonly transportSubscription: Disposable;
 
   public constructor(private readonly transport: IpcTransport) {
@@ -176,7 +181,7 @@ export class TypedIpcServer {
       throw new Error(`IPC 方法已注册：${method}`);
     }
 
-    this.handlers.set(method, async params => handler(params as IpcRequestMap[Method]["params"]));
+    this.handlers.set(method, async (params, signal) => handler(params as IpcRequestMap[Method]["params"], signal));
     return {
       dispose: () => {
         this.handlers.delete(method);
@@ -190,11 +195,22 @@ export class TypedIpcServer {
 
   public dispose(): void {
     this.transportSubscription.dispose();
+    for (const controller of this.activeRequests.values()) {
+      controller.abort();
+    }
+    this.activeRequests.clear();
     this.handlers.clear();
   }
 
   private async handleMessage(value: unknown): Promise<void> {
-    if (!isIpcMessage(value) || value.kind !== "request") {
+    if (!isIpcMessage(value)) {
+      return;
+    }
+    if (value.kind === "cancel") {
+      this.activeRequests.get(value.id)?.abort();
+      return;
+    }
+    if (value.kind !== "request") {
       return;
     }
 
@@ -204,16 +220,26 @@ export class TypedIpcServer {
       return;
     }
 
+    const controller = new AbortController();
+    this.activeRequests.set(value.id, controller);
     try {
-      const result = await handler(value.params);
+      const result = await handler(value.params, controller.signal);
       if (!isResponseResult(value.method, result)) {
         this.sendError(value.id, "HANDLER_FAILED", `IPC Handler 返回结构无效：${value.method}`);
         return;
       }
       this.transport.send({ kind: "response", id: value.id, ok: true, result });
     } catch (error: unknown) {
+      const aborted = controller.signal.aborted || (error instanceof Error && error.name === "AbortError");
       const message = error instanceof Error ? error.message : "未知 IPC 处理错误";
-      this.sendError(value.id, "HANDLER_FAILED", message);
+      this.transport.send({
+        kind: "response",
+        id: value.id,
+        ok: false,
+        error: { code: aborted ? "REQUEST_ABORTED" : "HANDLER_FAILED", message },
+      });
+    } finally {
+      this.activeRequests.delete(value.id);
     }
   }
 

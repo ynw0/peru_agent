@@ -28,6 +28,16 @@
       "mode": "copy"
     },
     {
+      "source": "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/common/independentAiIdeCompletionBridge.ts",
+      "target": "src/vs/workbench/contrib/independentAiIde/common/independentAiIdeCompletionBridge.ts",
+      "mode": "copy"
+    },
+    {
+      "source": "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/browser/independentAiIdeInlineCompletion.ts",
+      "target": "src/vs/workbench/contrib/independentAiIde/browser/independentAiIdeInlineCompletion.ts",
+      "mode": "copy"
+    },
+    {
       "source": "overlays/code-oss/workbench.desktop.import.txt",
       "target": "src/vs/workbench/workbench.desktop.main.ts",
       "mode": "insert-before",

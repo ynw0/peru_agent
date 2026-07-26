@@ -154,3 +154,89 @@ declare module 'vs/workbench/common/views' {
     readonly ViewsRegistry: unknown;
   };
 }
+
+declare module 'vs/base/common/lifecycle' {
+  export interface IDisposable { dispose(): void; }
+}
+
+declare module 'vs/base/common/cancellation' {
+  import type { IDisposable } from 'vs/base/common/lifecycle';
+  export interface CancellationToken {
+    readonly isCancellationRequested: boolean;
+    onCancellationRequested(listener: () => void): IDisposable;
+  }
+}
+
+declare module 'vs/editor/common/core/position' {
+  export class Position {
+    constructor(lineNumber: number, column: number);
+    readonly lineNumber: number;
+    readonly column: number;
+  }
+}
+
+declare module 'vs/editor/common/core/range' {
+  export class Range {
+    constructor(startLineNumber: number, startColumn: number, endLineNumber: number, endColumn: number);
+  }
+}
+
+declare module 'vs/editor/common/model' {
+  import type { Range } from 'vs/editor/common/core/range';
+  export interface ITextModel {
+    readonly uri: { toString(): string };
+    getLanguageId(): string;
+    getVersionId(): number;
+    getLineCount(): number;
+    getLineMaxColumn(lineNumber: number): number;
+    getLineContent(lineNumber: number): string;
+    getValueInRange(range: Range): string;
+  }
+}
+
+declare module 'vs/editor/common/languages' {
+  import type { CancellationToken } from 'vs/base/common/cancellation';
+  import type { Position } from 'vs/editor/common/core/position';
+  import type { Range } from 'vs/editor/common/core/range';
+  import type { ITextModel } from 'vs/editor/common/model';
+  export interface InlineCompletionContext {}
+  export interface InlineCompletion {
+    readonly insertText: string | { snippet: string };
+    readonly range?: Range;
+    readonly command?: { readonly id: string; readonly title: string; readonly arguments?: readonly unknown[] };
+  }
+  export interface InlineCompletions<TItem extends InlineCompletion = InlineCompletion> { readonly items: readonly TItem[]; }
+  export interface InlineCompletionsProvider<T extends InlineCompletions = InlineCompletions> {
+    provideInlineCompletions(model: ITextModel, position: Position, context: InlineCompletionContext, token: CancellationToken): Promise<T> | T;
+    freeInlineCompletions(completions: T): void;
+  }
+}
+
+declare module 'vs/editor/common/services/languageFeatures' {
+  import type { InlineCompletionsProvider } from 'vs/editor/common/languages';
+  import type { IDisposable } from 'vs/base/common/lifecycle';
+  export interface ILanguageFeaturesService {
+    readonly inlineCompletionsProvider: {
+      register(selector: string | { readonly language?: string; readonly scheme?: string }, provider: InlineCompletionsProvider): IDisposable;
+    };
+  }
+  export const ILanguageFeaturesService: ParameterDecorator;
+}
+
+declare module 'vs/platform/commands/common/commands' {
+  import type { IDisposable } from 'vs/base/common/lifecycle';
+  export const CommandsRegistry: {
+    registerCommand(id: string, handler: (accessor: unknown, ...args: unknown[]) => void): IDisposable;
+  };
+}
+
+declare module 'vs/workbench/common/contributions' {
+  export interface IWorkbenchContributionsRegistry {
+    registerWorkbenchContribution(contribution: new (...args: any[]) => unknown, phase: unknown): void;
+  }
+  export const Extensions: { readonly Workbench: unknown };
+}
+
+declare module 'vs/workbench/services/lifecycle/common/lifecycle' {
+  export enum LifecyclePhase { Starting, Ready, Restored, Eventually }
+}

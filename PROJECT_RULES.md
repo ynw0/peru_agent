@@ -87,3 +87,19 @@
 - 未知 Plan ID、ToolCall ID 或不合法状态转换必须明确失败，禁止静默创建或跳过。
 - Plan UI 只能提交批准或拒绝请求，不能直接修改 PlanRecord。
 - UI Snapshot 是 EventJournal 的投影，不是运行时事实来源；恢复必须从持久化会话和事件重建。
+
+## FIM 补全规则
+
+- Agent 模型与补全模型必须独立配置、独立 Provider 和独立预算，禁止共用长任务请求队列。
+- 补全模型必须同时支持 FIM、流式和 AbortSignal 取消；主动探测失败时禁止启用。
+- Provider 声明的 Capability 必须与主动探测结果完全一致，禁止根据模型名称猜测能力。
+- FIM 请求格式必须显式选择 `prompt + suffix` 或 Token Template，禁止静默互相回退。
+- 同一文档补全必须使用 latest-wins，新请求启动时终止旧请求。
+- UI/IPC 取消必须传播到 Server Handler 和模型 HTTP 请求，禁止只删除客户端 Promise。
+- Prefix、Suffix 和所有元数据必须分别受预算控制，禁止把完整仓库或完整大文件放入补全请求。
+- LSP、Diagnostics 和最近编辑缓存必须绑定精确文档版本，版本变化立即失效。
+- Workbench 侧上下文提取必须限制行数和字符数，禁止在主线程读取完整大文件。
+- 候选缓存必须设置 TTL 和容量上限，并包含 Provider、Prefix、Suffix、语言和元数据哈希。
+- 补全接受指标必须按已交付 `requestId` 幂等记录，未知请求和重复事件不得污染接受率。
+- FIM 控制 Token、代码围栏、非法控制字符和与 Prefix/Suffix 重复的候选必须过滤。
+- 未通过真实模型和真实硬件基准前，不得宣称达到 P50、P95、取消或主线程延迟目标。

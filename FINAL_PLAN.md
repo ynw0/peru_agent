@@ -326,14 +326,27 @@ Windows Native Brokers
 
 ### Phase 7：低延迟补全
 
-置信度：91/100
+状态：补全领域模型、OpenAI 兼容 FIM Provider、Typed IPC 取消、上下文和候选缓存、指标、基准框架及 Code OSS 原生 Inline Completion Overlay 已完成；真实模型和完整 Electron 性能门禁待执行。
 
-- FIM Provider；
-- Inline Completion；
-- 请求取消；
-- 上下文缓存；
-- 性能基准；
-- 模型能力探测。
+置信度：92/100
+
+- [x] Agent 与 Completion Provider 分离；
+- [x] OpenAI 兼容 FIM Provider；
+- [x] `prompt + suffix` 和显式 Token Template；
+- [x] Code OSS Inline Completion Provider；
+- [x] latest-wins 请求取消；
+- [x] Typed IPC Cancel Message；
+- [x] Prefix、Suffix 和元数据预算；
+- [x] 精确文档版本上下文缓存；
+- [x] TTL/LRU 候选缓存；
+- [x] P50/P95、取消和接受率指标；
+- [x] 性能目标评估框架；
+- [x] 模型能力主动探测；
+- [ ] 真实 LM Studio/vLLM/云端 FIM 模型集成测试；
+- [ ] 真实硬件 P50 < 120ms、P95 < 350ms；
+- [ ] 真实取消 < 20ms；
+- [ ] Electron Workbench 主线程阻塞 < 8ms；
+- [ ] 生产 IPC Transport 安装。
 
 ### Phase 8：子 Agent
 
@@ -463,7 +476,7 @@ Windows Native Brokers
 - [ ] 全局门禁：安装 Code OSS 锁定依赖并完成 Electron Workbench 编译与桌面启动；
 - [ ] 全局门禁：在 Windows 11 x64 编译并红队验证 Windows Sandbox Broker；
 - [ ] 全局门禁：安装主进程到独立 Agent Runtime 的生产 IPC Transport；
-- [ ] Phase 7：低延迟 FIM 代码补全；
+- [x] Phase 7：低延迟 FIM 代码补全 Runtime、缓存、取消、指标和 Code OSS Inline Completion Overlay；
 - [ ] Phase 8：子 Agent；
 - [ ] Phase 9：网络、搜索和浏览器；
 - [ ] Phase 10：认证应用 Computer Use、自进化、发布与强化。

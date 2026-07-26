@@ -11,6 +11,8 @@ const product = JSON.parse(await readFile(resolve(codeOssRoot, "product.json"), 
 const desktopMain = await readFile(resolve(codeOssRoot, "src/vs/workbench/workbench.desktop.main.ts"), "utf8");
 const contributionPath = resolve(codeOssRoot, "src/vs/workbench/contrib/independentAiIde/browser/independentAiIde.contribution.ts");
 const contribution = await readFile(contributionPath, "utf8");
+const inlineCompletionPath = resolve(codeOssRoot, "src/vs/workbench/contrib/independentAiIde/browser/independentAiIdeInlineCompletion.ts");
+const completionBridgePath = resolve(codeOssRoot, "src/vs/workbench/contrib/independentAiIde/common/independentAiIdeCompletionBridge.ts");
 const identifiers = await readFile(resolve(codeOssRoot, "src/vs/workbench/contrib/independentAiIde/common/independentAiIde.ts"), "utf8");
 
 const expectedProduct = {
@@ -47,5 +49,10 @@ for (const id of [
     throw new Error(`Workbench contribution 缺少容器定义：${id}`);
   }
 }
+if (!contribution.includes("independentAiIdeInlineCompletion")) {
+  throw new Error("Workbench contribution 未导入 Inline Completion Provider");
+}
 await stat(contributionPath);
+await stat(inlineCompletionPath);
+await stat(completionBridgePath);
 console.log("Code OSS Overlay 应用结果验证通过");

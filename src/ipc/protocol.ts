@@ -11,9 +11,15 @@ import type { CheckpointRecord } from "../checkpoint/checkpoint-manager.js";
 import type { DiffProposal } from "../diff/diff-manager.js";
 import type { PlanRecord } from "../plan/plan-manager.js";
 import type { WorkspaceFileSnapshot } from "../workspace/types.js";
+import type {
+  CompletionCandidate,
+  CompletionDocumentInput,
+  CompletionMetricsSnapshot,
+  CompletionProviderProbeResult,
+} from "../completion/types.js";
 
 // IPC 协议版本必须显式匹配；版本不一致时拒绝连接，不做隐式兼容。
-export const IPC_PROTOCOL_VERSION = 2 as const;
+export const IPC_PROTOCOL_VERSION = 3 as const;
 
 export interface RuntimeInitializeRequest {
   readonly protocolVersion: typeof IPC_PROTOCOL_VERSION;
@@ -122,6 +128,15 @@ export interface GetWorkbenchSnapshotRequest {
   readonly sessionId?: string;
 }
 
+export interface CompletionRequestParams {
+  readonly input: CompletionDocumentInput;
+}
+
+export interface CompletionAcceptedRequest {
+  readonly requestId: string;
+}
+
+
 // 请求方法表同时定义参数和返回值，是 Typed IPC 的唯一事实来源。
 export interface IpcRequestMap {
   readonly "runtime.initialize": {
@@ -208,6 +223,26 @@ export interface IpcRequestMap {
     readonly params: GetWorkbenchSnapshotRequest;
     readonly result: WorkbenchSnapshot;
   };
+  readonly "completion.probe": {
+    readonly params: Record<string, never>;
+    readonly result: CompletionProviderProbeResult;
+  };
+  readonly "completion.request": {
+    readonly params: CompletionRequestParams;
+    readonly result: { readonly candidate: CompletionCandidate | null };
+  };
+  readonly "completion.accepted": {
+    readonly params: CompletionAcceptedRequest;
+    readonly result: { readonly recorded: true };
+  };
+  readonly "completion.metrics": {
+    readonly params: Record<string, never>;
+    readonly result: CompletionMetricsSnapshot;
+  };
+  readonly "completion.clearCache": {
+    readonly params: Record<string, never>;
+    readonly result: { readonly cleared: true };
+  };
 }
 
 export interface IpcEventMap {
@@ -250,6 +285,12 @@ export interface IpcErrorResponseMessage {
 
 export type IpcResponseMessage = IpcSuccessResponseMessage | IpcErrorResponseMessage;
 
+export interface IpcCancelMessage {
+  readonly kind: "cancel";
+  readonly id: string;
+}
+
+
 export type IpcEventMessage = {
   readonly [Method in IpcEventMethod]: {
     readonly kind: "event";
@@ -258,7 +299,7 @@ export type IpcEventMessage = {
   };
 }[IpcEventMethod];
 
-export type IpcMessage = IpcRequestMessage | IpcResponseMessage | IpcEventMessage;
+export type IpcMessage = IpcRequestMessage | IpcResponseMessage | IpcEventMessage | IpcCancelMessage;
 
 export type IpcErrorCode =
   | "INVALID_MESSAGE"

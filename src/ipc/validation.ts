@@ -37,6 +37,11 @@ const REQUEST_METHODS: ReadonlySet<string> = new Set<IpcRequestMethod>([
   "plan.get",
   "plan.resolve",
   "workbench.getSnapshot",
+  "completion.probe",
+  "completion.request",
+  "completion.accepted",
+  "completion.metrics",
+  "completion.clearCache",
 ]);
 
 const EVENT_METHODS: ReadonlySet<string> = new Set<IpcEventMethod>([
@@ -127,6 +132,14 @@ export function isRequestParams(method: IpcRequestMethod, value: unknown): boole
         && (value.decision === "approved" || value.decision === "rejected");
     case "workbench.getSnapshot":
       return hasOnlyKeys(value, ["sessionId"]) && isOptionalNonEmptyString(value.sessionId);
+    case "completion.probe":
+    case "completion.metrics":
+    case "completion.clearCache":
+      return hasOnlyKeys(value, []);
+    case "completion.request":
+      return hasOnlyKeys(value, ["input"]) && isCompletionDocumentInput(value.input);
+    case "completion.accepted":
+      return hasOnlyKeys(value, ["requestId"]) && isNonEmptyString(value.requestId);
   }
 }
 
@@ -174,6 +187,16 @@ export function isResponseResult(method: IpcRequestMethod, value: unknown): bool
       return isPlanRecord(value);
     case "workbench.getSnapshot":
       return isWorkbenchSnapshot(value);
+    case "completion.probe":
+      return isCompletionProviderProbeResult(value);
+    case "completion.request":
+      return isRecord(value) && (value.candidate === null || isCompletionCandidate(value.candidate));
+    case "completion.accepted":
+      return isRecord(value) && value.recorded === true;
+    case "completion.metrics":
+      return isCompletionMetricsSnapshot(value);
+    case "completion.clearCache":
+      return isRecord(value) && value.cleared === true;
   }
 }
 
@@ -461,6 +484,81 @@ function isAgentEvent(value: unknown): boolean {
   }
 }
 
+function isCompletionDocumentInput(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.documentUri)
+    && isNonEmptyString(value.languageId)
+    && isNonNegativeInteger(value.version)
+    && isNonNegativeInteger(value.offset)
+    && typeof value.text === "string"
+    && Number(value.offset) <= value.text.length
+    && (value.enrichment === undefined || (isRecord(value.enrichment)
+      && (value.enrichment.currentFunction === undefined || typeof value.enrichment.currentFunction === "string")
+      && (value.enrichment.imports === undefined || isStringArray(value.enrichment.imports))
+      && (value.enrichment.recentEdits === undefined || isStringArray(value.enrichment.recentEdits))
+      && (value.enrichment.lspTypes === undefined || isStringArray(value.enrichment.lspTypes))
+      && (value.enrichment.diagnostics === undefined || isStringArray(value.enrichment.diagnostics))
+      && (value.enrichment.projectRules === undefined || isStringArray(value.enrichment.projectRules))));
+}
+
+function isCompletionCapability(value: unknown): boolean {
+  return isRecord(value)
+    && typeof value.fim === "boolean"
+    && typeof value.streaming === "boolean"
+    && typeof value.cancellation === "boolean"
+    && Number.isInteger(value.maxPrefixTokens)
+    && Number(value.maxPrefixTokens) > 0
+    && Number.isInteger(value.maxSuffixTokens)
+    && Number(value.maxSuffixTokens) > 0;
+}
+
+function isCompletionProviderProbeResult(value: unknown): boolean {
+  return isRecord(value)
+    && isCompletionCapability(value.capability)
+    && isNonEmptyString(value.modelId)
+    && isNonNegativeFiniteNumber(value.firstTokenLatencyMs)
+    && isNonNegativeFiniteNumber(value.totalLatencyMs)
+    && isNonNegativeFiniteNumber(value.cancellationLatencyMs);
+}
+
+function isCompletionCandidate(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.requestId)
+    && isNonEmptyString(value.documentUri)
+    && isNonNegativeInteger(value.documentVersion)
+    && isNonNegativeInteger(value.offset)
+    && isNonEmptyString(value.text)
+    && isNonEmptyString(value.providerId)
+    && typeof value.cacheHit === "boolean"
+    && isNonNegativeFiniteNumber(value.firstTokenLatencyMs)
+    && isNonNegativeFiniteNumber(value.totalLatencyMs);
+}
+
+function isCompletionMetricsSnapshot(value: unknown): boolean {
+  return isRecord(value)
+    && isNonNegativeInteger(value.requests)
+    && isNonNegativeInteger(value.cacheHits)
+    && isNonNegativeInteger(value.cancellations)
+    && isNonNegativeInteger(value.failures)
+    && isNonNegativeInteger(value.accepted)
+    && isNullableNonNegativeNumber(value.p50FirstTokenMs)
+    && isNullableNonNegativeNumber(value.p95FirstTokenMs)
+    && isNullableNonNegativeNumber(value.p50TotalMs)
+    && isNullableNonNegativeNumber(value.p95TotalMs)
+    && typeof value.acceptanceRate === "number"
+    && Number.isFinite(value.acceptanceRate)
+    && value.acceptanceRate >= 0
+    && value.acceptanceRate <= 1;
+}
+
+function isNonNegativeFiniteNumber(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isNullableNonNegativeNumber(value: unknown): boolean {
+  return value === null || isNonNegativeFiniteNumber(value);
+}
+
 function isEventPayload(method: IpcEventMethod, value: unknown): boolean {
   switch (method) {
     case "agent.event":
@@ -477,6 +575,10 @@ function isEventPayload(method: IpcEventMethod, value: unknown): boolean {
 export function isIpcMessage(value: unknown): value is IpcMessage {
   if (!isRecord(value) || typeof value.kind !== "string") {
     return false;
+  }
+
+  if (value.kind === "cancel") {
+    return hasOnlyKeys(value, ["kind", "id"]) && isNonEmptyString(value.id);
   }
 
   if (value.kind === "request") {

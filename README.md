@@ -10,7 +10,8 @@
 - Phase 3：自研 Agent Core、OpenAI 兼容流协议和 Tool 循环；
 - Phase 4：Workspace、Diff、Checkpoint 和安全文件修改链；
 - Phase 5：PowerShell AST、Windows Sandbox Broker 协议和原生安全原型源码；
-- Phase 6：Agent Chat、Plan、Tool、Permission、Diff、Checkpoint、Session 的交互层与 Code OSS 原生 View Overlay。
+- Phase 6：Agent Chat、Plan、Tool、Permission、Diff、Checkpoint、Session 的交互层与 Code OSS 原生 View Overlay；
+- Phase 7：独立 FIM Completion Runtime、缓存、跨 IPC 取消、性能指标和 Code OSS 原生 Inline Completion Provider。
 
 Agent Core 已支持：
 
@@ -27,7 +28,11 @@ Agent Core 已支持：
 - Agent Chat 流式消息、Token 和 Tool 卡片；
 - Plan Review、权限交互、Diff/Checkpoint 操作；
 - 会话列表、事件时间线、Retry 和按 Session 的事件重放；
-- WorkbenchController 只通过 Typed IPC 调用运行时。
+- WorkbenchController 只通过 Typed IPC 调用运行时；
+- OpenAI 兼容 FIM `prompt + suffix` 与显式 Token Template；
+- latest-wins 补全取消、版本化上下文缓存和 TTL/LRU 候选缓存；
+- Code OSS 原生 Inline Completion、Ghost Text 和接受率回传；
+- 首 Token/总延迟 P50/P95、取消、缓存命中和接受率指标。
 
 ## 尚未完成
 
@@ -35,7 +40,8 @@ Agent Core 已支持：
 - 主进程到独立 Agent Runtime 的生产 IPC Transport；
 - Git、LSP 和 Diagnostics 工具；
 - Windows Sandbox Broker 的 Windows 11 真机构建、运行和红队验证；
-- 真实 Browser Runtime、Computer Use 和 Completion Runtime；
+- 真实 Browser Runtime 和 Computer Use；
+- 真实 LM Studio/vLLM FIM 端点及补全性能门禁；
 - 对真实 LM Studio、vLLM 或云端模型服务的联网集成测试。
 
 ## 核心项目门禁
@@ -59,8 +65,10 @@ npm run smoke
 - `PHASE4_REPORT.md`：Workspace、Diff 与 Checkpoint 执行报告；
 - `PHASE5_REPORT.md`：PowerShell 与 Windows Sandbox Broker 执行报告；
 - `PHASE6_REPORT.md`：AI IDE 交互层执行报告；
+- `PHASE7_REPORT.md`：低延迟 FIM 补全执行报告；
 - `docs/architecture/agent-core.md`：Agent Core 架构；
 - `docs/architecture/workspace-diff-checkpoint.md`：安全文件修改链；
 - `docs/architecture/powershell-windows-sandbox.md`：PowerShell 与 Windows 原生沙箱架构；
 - `docs/architecture/ai-ide-interaction.md`：Agent Chat、Plan、Permission、Diff 与会话交互架构；
+- `docs/architecture/low-latency-fim-completion.md`：FIM 补全、取消、缓存和指标架构；
 - `docs/lessons/2026-07-26-agent-runtime-ordering-and-recovery.md`：本阶段根因经验。

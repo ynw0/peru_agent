@@ -1,3 +1,4 @@
+import 'vs/workbench/contrib/independentAiIde/browser/independentAiIdeInlineCompletion';
 /*---------------------------------------------------------------------------------------------
  * Independent AI IDE Workbench contribution.
  * 这里使用 Code OSS 1.74.0 原生 Registry 注册 Activity Bar、Panel 与 View。

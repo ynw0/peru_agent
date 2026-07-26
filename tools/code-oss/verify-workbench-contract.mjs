@@ -16,9 +16,19 @@ const viewPath = resolve(
   overlayRoot,
   "vs/workbench/contrib/independentAiIde/browser/independentAiIdeView.ts",
 );
+const inlineCompletionPath = resolve(
+  overlayRoot,
+  "vs/workbench/contrib/independentAiIde/browser/independentAiIdeInlineCompletion.ts",
+);
+const completionBridgePath = resolve(
+  overlayRoot,
+  "vs/workbench/contrib/independentAiIde/common/independentAiIdeCompletionBridge.ts",
+);
 const contribution = await readFile(contributionPath, "utf8");
 const view = await readFile(viewPath, "utf8");
-const sourceTexts = [contribution, view];
+const inlineCompletion = await readFile(inlineCompletionPath, "utf8");
+const completionBridge = await readFile(completionBridgePath, "utf8");
+const sourceTexts = [contribution, view, inlineCompletion, completionBridge];
 
 async function internalModuleExists(moduleId) {
   const base = resolve(codeOssRoot, "src", moduleId);
@@ -69,6 +79,20 @@ const viewPaneSource = await readFile(
 );
 if (!viewPaneSource.includes("export abstract class ViewPane") || !viewPaneSource.includes("renderBody(container: HTMLElement)")) {
   throw new Error("Code OSS 1.74.0 ViewPane API 与 Overlay 预期不一致");
+}
+
+const languagesSource = await readFile(resolve(codeOssRoot, "src/vs/editor/common/languages.ts"), "utf8");
+for (const requiredApi of ["export interface InlineCompletionsProvider", "provideInlineCompletions", "freeInlineCompletions"]) {
+  if (!languagesSource.includes(requiredApi)) {
+    throw new Error(`Code OSS 1.74.0 缺少 Inline Completion API：${requiredApi}`);
+  }
+}
+const languageFeaturesSource = await readFile(resolve(codeOssRoot, "src/vs/editor/common/services/languageFeatures.ts"), "utf8");
+if (!languageFeaturesSource.includes("readonly inlineCompletionsProvider")) {
+  throw new Error("Code OSS 1.74.0 缺少 inlineCompletionsProvider Registry");
+}
+if (!inlineCompletion.includes("token.onCancellationRequested") || !inlineCompletion.includes("inlineCompletionsProvider.register")) {
+  throw new Error("Inline Completion Overlay 缺少取消或 Provider 注册");
 }
 
 console.log(`Code OSS ${pin.version} Workbench API 契约检查通过`);
