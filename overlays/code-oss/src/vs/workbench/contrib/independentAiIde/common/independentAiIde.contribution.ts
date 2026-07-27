@@ -4,6 +4,7 @@ export const INDEPENDENT_AI_IDE_CONTAINER_IDS = {
   tasks: "independentAiIde.tasks",
   permissions: "independentAiIde.permissions",
   browser: "independentAiIde.browser",
+  computerUse: "independentAiIde.computerUse",
 } as const;
 
 export const INDEPENDENT_AI_IDE_VIEW_IDS = {
@@ -11,6 +12,7 @@ export const INDEPENDENT_AI_IDE_VIEW_IDS = {
   taskList: "independentAiIde.taskList",
   permissionQueue: "independentAiIde.permissionQueue",
   browserSession: "independentAiIde.browserSession",
+  computerSession: "independentAiIde.computerSession",
 } as const;
 
 // Code OSS 适配器负责调用真实 Workbench Registry；业务定义不直接依赖具体 API。
@@ -28,6 +30,7 @@ export function registerIndependentAiIdeWorkbench(
   adapter.registerPanelContainer(INDEPENDENT_AI_IDE_CONTAINER_IDS.tasks, "Tasks", "tasklist", 20);
   adapter.registerPanelContainer(INDEPENDENT_AI_IDE_CONTAINER_IDS.permissions, "Permissions", "shield", 30);
   adapter.registerActivityBarContainer(INDEPENDENT_AI_IDE_CONTAINER_IDS.browser, "Browser", "globe", 40);
+  adapter.registerActivityBarContainer(INDEPENDENT_AI_IDE_CONTAINER_IDS.computerUse, "Computer Use", "device-desktop", 50);
 
   adapter.registerView(INDEPENDENT_AI_IDE_CONTAINER_IDS.agent, INDEPENDENT_AI_IDE_VIEW_IDS.chat, "AI Agent");
   adapter.registerView(INDEPENDENT_AI_IDE_CONTAINER_IDS.tasks, INDEPENDENT_AI_IDE_VIEW_IDS.taskList, "Tasks");
@@ -40,5 +43,10 @@ export function registerIndependentAiIdeWorkbench(
     INDEPENDENT_AI_IDE_CONTAINER_IDS.browser,
     INDEPENDENT_AI_IDE_VIEW_IDS.browserSession,
     "Browser",
+  );
+  adapter.registerView(
+    INDEPENDENT_AI_IDE_CONTAINER_IDS.computerUse,
+    INDEPENDENT_AI_IDE_VIEW_IDS.computerSession,
+    "Computer Use",
   );
 }

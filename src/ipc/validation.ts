@@ -1,4 +1,10 @@
 import { IPC_PROTOCOL_VERSION } from "./protocol.js";
+import {
+  validateComputerActionResult,
+  validateComputerScreenshot,
+  validateComputerUiSnapshot,
+  validateRunningApplicationIdentity,
+} from "../computer-use/broker-validation.js";
 import type {
   IpcEventMethod,
   IpcMessage,
@@ -62,6 +68,10 @@ const REQUEST_METHODS: ReadonlySet<string> = new Set<IpcRequestMethod>([
   "browser.type",
   "browser.close",
   "browser.list",
+  "computer.windows",
+  "computer.inspect",
+  "computer.screenshot",
+  "computer.audit.list",
 ]);
 
 const EVENT_METHODS: ReadonlySet<string> = new Set<IpcEventMethod>([
@@ -70,6 +80,10 @@ const EVENT_METHODS: ReadonlySet<string> = new Set<IpcEventMethod>([
   "runtime.health.changed",
   "browser.session.changed",
   "browser.snapshot.changed",
+  "computer.window.changed",
+  "computer.snapshot.changed",
+  "computer.action.prepared",
+  "computer.action.completed",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -227,6 +241,13 @@ export function isRequestParams(method: IpcRequestMethod, value: unknown): boole
         && String(value.text).length <= 10_000;
     case "browser.list":
       return hasOnlyKeys(value, ["workspaceId"]) && isOptionalNonEmptyString(value.workspaceId);
+    case "computer.windows":
+    case "computer.audit.list":
+      return hasOnlyKeys(value, []);
+    case "computer.inspect":
+      return hasOnlyKeys(value, ["windowHandle"]) && isNonEmptyString(value.windowHandle);
+    case "computer.screenshot":
+      return hasOnlyKeys(value, ["snapshotId"]) && isNonEmptyString(value.snapshotId);
   }
 }
 
@@ -318,6 +339,14 @@ export function isResponseResult(method: IpcRequestMethod, value: unknown): bool
       return isBrowserActionResult(value);
     case "browser.list":
       return isRecord(value) && Array.isArray(value.sessions) && value.sessions.every(isBrowserSessionRecord);
+    case "computer.windows":
+      return isRecord(value) && Array.isArray(value.windows) && value.windows.every(isComputerWindowRecord);
+    case "computer.inspect":
+      return validateBoolean(() => validateComputerUiSnapshot(value));
+    case "computer.screenshot":
+      return validateBoolean(() => validateComputerScreenshot(value));
+    case "computer.audit.list":
+      return isRecord(value) && Array.isArray(value.entries) && value.entries.every(isComputerUseAuditEntry);
   }
 }
 
@@ -848,9 +877,91 @@ function isEventPayload(method: IpcEventMethod, value: unknown): boolean {
       return isBrowserSessionRecord(value);
     case "browser.snapshot.changed":
       return isBrowserDomSnapshot(value);
+    case "computer.window.changed":
+      return isComputerWindowRecord(value);
+    case "computer.snapshot.changed":
+      return validateBoolean(() => validateComputerUiSnapshot(value));
+    case "computer.action.prepared":
+      return isPreparedComputerAction(value);
+    case "computer.action.completed":
+      return validateBoolean(() => validateComputerActionResult(value));
   }
 }
 
+
+
+function validateBoolean(validator: () => unknown): boolean {
+  try {
+    validator();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isComputerCertification(value: unknown): boolean {
+  return isRecord(value)
+    && (value.status === "certified" || value.status === "inspect-only" || value.status === "blocked")
+    && (value.applicationId === undefined || isNonEmptyString(value.applicationId))
+    && (value.displayName === undefined || isNonEmptyString(value.displayName))
+    && isStringArray(value.allowedActions)
+    && value.allowedActions.every(action => action === "click" || action === "type" || action === "shortcut")
+    && isStringArray(value.allowedShortcuts)
+    && isStringArray(value.reasons)
+    && (value.manifestSha256 === undefined || isSha256(value.manifestSha256));
+}
+
+function isComputerWindowRecord(value: unknown): boolean {
+  return isRecord(value)
+    && validateBoolean(() => validateRunningApplicationIdentity(value.identity))
+    && isComputerCertification(value.certification);
+}
+
+function isComputerElementEvidence(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.snapshotId)
+    && isSha256(value.snapshotSha256)
+    && isNonEmptyString(value.elementId)
+    && Array.isArray(value.runtimeId)
+    && value.runtimeId.every(Number.isInteger)
+    && isNonEmptyString(value.role)
+    && typeof value.name === "string"
+    && typeof value.automationId === "string"
+    && typeof value.className === "string"
+    && isRecord(value.bounds)
+    && [value.bounds.x, value.bounds.y, value.bounds.width, value.bounds.height].every(item => typeof item === "number" && Number.isFinite(item));
+}
+
+function isPreparedComputerAction(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && (value.action === "click" || value.action === "type" || value.action === "shortcut")
+    && isNonEmptyString(value.applicationId)
+    && isSha256(value.identityFingerprint)
+    && isSha256(value.manifestSha256)
+    && isNonEmptyString(value.snapshotId)
+    && (value.evidence === undefined || isComputerElementEvidence(value.evidence))
+    && (value.shortcut === undefined || isNonEmptyString(value.shortcut))
+    && (value.textSha256 === undefined || isSha256(value.textSha256))
+    && isNonEmptyString(value.reason)
+    && isStringArray(value.requestedCapabilities)
+    && isNonEmptyString(value.createdAt)
+    && isNonEmptyString(value.expiresAt);
+}
+
+function isComputerUseAuditEntry(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && isNonEmptyString(value.timestamp)
+    && (value.action === "inspect" || value.action === "screenshot" || value.action === "click" || value.action === "type" || value.action === "shortcut")
+    && (value.decision === "allowed" || value.decision === "denied" || value.decision === "completed" || value.decision === "failed")
+    && isNonNegativeInteger(value.processId)
+    && isNonEmptyString(value.windowHandle)
+    && (value.applicationId === undefined || isNonEmptyString(value.applicationId))
+    && (value.snapshotId === undefined || isNonEmptyString(value.snapshotId))
+    && (value.elementId === undefined || isNonEmptyString(value.elementId))
+    && isNonEmptyString(value.reason);
+}
 
 function isNetworkMode(value: unknown): boolean {
   return value === "offline" || value === "lan" || value === "internet";

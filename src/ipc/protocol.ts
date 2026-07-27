@@ -26,9 +26,17 @@ import type {
   CompletionMetricsSnapshot,
   CompletionProviderProbeResult,
 } from "../completion/types.js";
+import type {
+  ComputerActionResult,
+  ComputerScreenshot,
+  ComputerUiSnapshot,
+  ComputerUseAuditEntry,
+  ComputerWindowRecord,
+  PreparedComputerAction,
+} from "../computer-use/types.js";
 
 // IPC 协议版本必须显式匹配；版本不一致时拒绝连接，不做隐式兼容。
-export const IPC_PROTOCOL_VERSION = 5 as const;
+export const IPC_PROTOCOL_VERSION = 6 as const;
 
 export interface RuntimeInitializeRequest {
   readonly protocolVersion: typeof IPC_PROTOCOL_VERSION;
@@ -194,6 +202,9 @@ export interface BrowserTargetIpcRequest extends BrowserSessionIpcRequest {
 }
 export interface BrowserTypeIpcRequest extends BrowserTargetIpcRequest { readonly text: string }
 export interface BrowserListIpcRequest { readonly workspaceId?: string }
+
+export interface ComputerInspectIpcRequest { readonly windowHandle: string }
+export interface ComputerSnapshotIpcRequest { readonly snapshotId: string }
 
 
 // 请求方法表同时定义参数和返回值，是 Typed IPC 的唯一事实来源。
@@ -382,6 +393,22 @@ export interface IpcRequestMap {
     readonly params: BrowserListIpcRequest;
     readonly result: { readonly sessions: readonly BrowserSessionRecord[] };
   };
+  readonly "computer.windows": {
+    readonly params: Record<string, never>;
+    readonly result: { readonly windows: readonly ComputerWindowRecord[] };
+  };
+  readonly "computer.inspect": {
+    readonly params: ComputerInspectIpcRequest;
+    readonly result: ComputerUiSnapshot;
+  };
+  readonly "computer.screenshot": {
+    readonly params: ComputerSnapshotIpcRequest;
+    readonly result: ComputerScreenshot;
+  };
+  readonly "computer.audit.list": {
+    readonly params: Record<string, never>;
+    readonly result: { readonly entries: readonly ComputerUseAuditEntry[] };
+  };
 }
 
 export interface IpcEventMap {
@@ -393,6 +420,10 @@ export interface IpcEventMap {
   };
   readonly "browser.session.changed": BrowserSessionRecord;
   readonly "browser.snapshot.changed": BrowserDomSnapshot;
+  readonly "computer.window.changed": ComputerWindowRecord;
+  readonly "computer.snapshot.changed": ComputerUiSnapshot;
+  readonly "computer.action.prepared": PreparedComputerAction;
+  readonly "computer.action.completed": ComputerActionResult;
 }
 
 export type IpcRequestMethod = keyof IpcRequestMap;

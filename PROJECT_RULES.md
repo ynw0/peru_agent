@@ -136,3 +136,21 @@
 - DOM 动作必须绑定 Snapshot ID、元素 ID、role、accessible name 和 disabled 证据，并在动作前复核、动作后返回新证据。
 - Workbench Browser View 只能通过 Bridge 和 Typed IPC 操作，禁止导入文件系统、进程、Fetch、XMLHttpRequest 或 WebSocket。
 - 真实 Browser Proxy、Playwright 和 Chromium E2E 未通过前，产品不得宣称浏览器可以安全联网。
+
+## 认证应用 Computer Use 规则
+
+- 可执行文件名和窗口标题不能作为应用认证身份；必须绑定绝对路径、Publisher、Signer Thumbprint、精确文件 SHA-256、完整版本正则和 Window Class。
+- 未认证应用只允许列出窗口、读取 UI Tree 和截图，任何点击、输入或快捷键必须明确拒绝。
+- Secure Desktop、UAC、Windows Security、凭据窗口以及高、System 或未知完整性进程禁止交互。
+- HWND 必须在动作准备、执行前和执行后重新绑定 PID 与完整应用身份，禁止假设窗口句柄永久有效。
+- UI 元素动作必须绑定 Snapshot ID/SHA、Runtime ID、Role、Name、Automation ID、Class 和 Bounds，禁止使用元素序号作为证据。
+- 所有跨进程坐标必须是有限数字，Width 和 Height 必须非负。
+- Password 元素和名称、Automation ID 命中密码、Token、API Key 等敏感词的元素禁止输入。
+- Click 必须使用 Invoke、Selection 或 Toggle Pattern；Type 必须使用 Value Pattern；快捷键必须同时通过应用清单和 Broker 固定白名单。
+- Prepared Computer Action 必须一次性、短时有效并绑定应用身份、Manifest Hash 和 Snapshot；重复、过期或身份变化必须拒绝。
+- 输入明文只能短暂保存在 Runtime 内存；事件、权限卡片、持久化记录和审计只能保存文本哈希，并在拒绝、过期、失败和完成路径清理明文。
+- Workbench 和普通 Typed IPC 不得暴露直接 Computer Use 执行接口；交互只能由声明 `computer.interact` 的 Agent Tool 经 PermissionCoordinator 发起。
+- Windows Broker 必须在动作前独立重验应用和元素证据，并在动作后返回新 Snapshot；Runtime 必须再次认证应用。
+- 同步动作准备方法禁止 fire-and-forget 异步事件；监听器错误必须可由调用栈观察或由显式调度器处理。
+- Windows UI Automation Broker 未在 Windows 11 x64 完成编译、真实应用兼容性和红队测试前，产品不得启用 Computer Use 交互。
+- 历史阶段的源码契约应验证协议最低版本和必需方法，禁止固定旧 `IPC_PROTOCOL_VERSION` 文本阻止后续合法升级。

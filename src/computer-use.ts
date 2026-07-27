@@ -1,4 +1,3 @@
-// 认证应用记录必须绑定可执行文件、发布者和支持版本范围。
 export interface CertifiedApplication {
   readonly id: string;
   readonly executableName: string;
@@ -7,14 +6,13 @@ export interface CertifiedApplication {
   readonly interactive: true;
 }
 
-// 当前运行应用的信息由 Windows Broker 提供，不能由模型自行声明。
 export interface RunningApplication {
   readonly executableName: string;
   readonly publisher: string;
   readonly version: string;
 }
 
-// 只有匹配认证清单的应用才允许点击或输入。
+// Phase 0 兼容测试入口；正式 Computer Use 使用 computer-use/certification.ts 的强身份绑定。
 export function isComputerInteractionAllowed(
   application: RunningApplication,
   certifiedApplications: readonly CertifiedApplication[],
@@ -25,3 +23,13 @@ export function isComputerInteractionAllowed(
     && certified.supportedVersionPattern.test(application.version),
   );
 }
+
+export * from "./computer-use/types.js";
+export * from "./computer-use/certification.js";
+export * from "./computer-use/broker-protocol.js";
+export * from "./computer-use/broker-validation.js";
+export * from "./computer-use/broker-transport.js";
+export * from "./computer-use/broker-client.js";
+export * from "./computer-use/audit.js";
+export * from "./computer-use/runtime.js";
+export * from "./computer-use/computer-tools.js";

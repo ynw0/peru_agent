@@ -388,13 +388,22 @@ Windows Native Brokers
 
 ### Phase 10：认证应用 Computer Use
 
-置信度：90/100
+置信度：89/100
 
-- UI Automation Broker；
-- 应用认证清单；
-- 动作证据；
-- 动作后验证；
-- 未认证应用拒绝交互。
+- [x] 应用认证清单绑定路径、Publisher、证书 Thumbprint、文件 SHA-256、版本和 Window Class；
+- [x] 未认证应用只允许窗口、UI Tree 和截图检查；
+- [x] UI Automation Snapshot 和元素 Pattern；
+- [x] 应用身份 Fingerprint、Manifest Hash、Snapshot 和元素动作证据；
+- [x] Click、Type 和 Shortcut 一次性动作授权；
+- [x] 密码元素、敏感窗口、Secure Desktop 和高完整性窗口拒绝；
+- [x] Agent Tool `computer.interact` 权限链；
+- [x] Typed IPC Version 6，只开放检查、截图和审计；
+- [x] Code OSS Computer Use View；
+- [x] Windows UI Automation Broker C# 原型源码；
+- [x] 动作前双侧重验和动作后 Snapshot 验证；
+- [ ] Windows 11 x64 编译、真实 UI Automation 和红队测试；
+- [ ] 第一批认证应用清单签署；
+- [ ] 生产 IPC Transport 安装。
 
 ### Phase 11：Tool/Skill 自进化
 
@@ -498,5 +507,7 @@ Windows Native Brokers
 - [x] Phase 7：低延迟 FIM 代码补全 Runtime、缓存、取消、指标和 Code OSS Inline Completion Overlay；
 - [x] Phase 8：子 Agent 调度、预算、快照隔离、Reviewer/Tester 门禁和 Patch 合并；
 - [x] Phase 9：Egress Broker、WebSearch/WebFetch、受控下载和 Browser Runtime 核心；
-- [ ] Phase 10：认证应用 Computer Use；
-- [ ] Phase 11：Tool/Skill 自进化、发布与强化。
+- [x] Phase 10：认证应用 Computer Use Runtime、权限 Tool、Typed IPC、Workbench View 和 Windows Broker 原型；
+- [ ] 全局门禁：在 Windows 11 x64 编译并红队验证 Windows UI Automation Broker；
+- [ ] Phase 11：Tool/Skill 自进化；
+- [ ] Phase 12：发布、本地化与安全强化。

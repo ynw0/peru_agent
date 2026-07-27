@@ -96,6 +96,53 @@ export interface IndependentAiIdeBrowserSnapshotView {
 	readonly elements: readonly IndependentAiIdeBrowserElementView[];
 }
 
+
+export interface IndependentAiIdeComputerCertificationView {
+	readonly status: 'certified' | 'inspect-only' | 'blocked';
+	readonly applicationId?: string;
+	readonly displayName?: string;
+	readonly reasons: readonly string[];
+}
+
+export interface IndependentAiIdeComputerWindowView {
+	readonly processId: number;
+	readonly windowHandle: string;
+	readonly windowTitle: string;
+	readonly executableName: string;
+	readonly version: string;
+	readonly windowClass: string;
+	readonly integrityLevel: 'low' | 'medium' | 'high' | 'system' | 'unknown';
+	readonly secureDesktop: boolean;
+	readonly certification: IndependentAiIdeComputerCertificationView;
+}
+
+export interface IndependentAiIdeComputerElementView {
+	readonly id: string;
+	readonly role: string;
+	readonly name: string;
+	readonly automationId: string;
+	readonly enabled: boolean;
+	readonly offscreen: boolean;
+	readonly isPassword: boolean;
+	readonly patterns: readonly string[];
+}
+
+export interface IndependentAiIdeComputerSnapshotView {
+	readonly id: string;
+	readonly windowHandle: string;
+	readonly windowTitle: string;
+	readonly certification: IndependentAiIdeComputerCertificationView;
+	readonly elements: readonly IndependentAiIdeComputerElementView[];
+}
+
+export interface IndependentAiIdeComputerActionView {
+	readonly id: string;
+	readonly action: 'click' | 'type' | 'shortcut';
+	readonly applicationId: string;
+	readonly reason: string;
+	readonly expiresAt: string;
+}
+
 export interface IndependentAiIdeWorkbenchSnapshot {
 	readonly activeSessionId?: string;
 	readonly sessionStatus: IndependentAiIdeSessionStatus;
@@ -108,6 +155,9 @@ export interface IndependentAiIdeWorkbenchSnapshot {
 	readonly subagents: readonly IndependentAiIdeSubagentView[];
 	readonly browserSessions: readonly IndependentAiIdeBrowserSessionView[];
 	readonly browserSnapshot?: IndependentAiIdeBrowserSnapshotView;
+	readonly computerWindows: readonly IndependentAiIdeComputerWindowView[];
+	readonly computerSnapshot?: IndependentAiIdeComputerSnapshotView;
+	readonly computerPreparedActions: readonly IndependentAiIdeComputerActionView[];
 	readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
 	readonly failed?: { readonly code: string; readonly message: string };
 }
@@ -130,6 +180,9 @@ export interface IndependentAiIdeWorkbenchBridge {
 	clickBrowser(browserSessionId: string, snapshotId: string, elementId: string): Promise<void>;
 	typeBrowser(browserSessionId: string, snapshotId: string, elementId: string, text: string): Promise<void>;
 	closeBrowser(browserSessionId: string): Promise<void>;
+	refreshComputerWindows(): Promise<void>;
+	inspectComputerWindow(windowHandle: string): Promise<void>;
+	screenshotComputerWindow(snapshotId: string): Promise<void>;
 }
 
 let installedBridge: IndependentAiIdeWorkbenchBridge | undefined;

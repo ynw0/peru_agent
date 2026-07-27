@@ -7,6 +7,14 @@ import type { NetworkMode } from "../agent-protocol.js";
 import type { EgressAuditEntry } from "../egress/types.js";
 import type { WebDownloadArtifact, WebFetchResult, WebSearchResult } from "../web/types.js";
 import { EMPTY_WORKBENCH_SNAPSHOT } from "./workbench-state.js";
+import type {
+  ComputerActionResult,
+  ComputerScreenshot,
+  ComputerUiSnapshot,
+  ComputerUseAuditEntry,
+  ComputerWindowRecord,
+  PreparedComputerAction,
+} from "../computer-use/types.js";
 
 export interface WorkbenchControllerState {
   readonly connected: boolean;
@@ -17,6 +25,10 @@ export interface WorkbenchControllerState {
   readonly timeline: readonly JournalEntry[];
   readonly browserSessions: readonly BrowserSessionRecord[];
   readonly browserSnapshot?: BrowserDomSnapshot;
+  readonly computerWindows: readonly ComputerWindowRecord[];
+  readonly computerSnapshot?: ComputerUiSnapshot;
+  readonly computerPreparedActions: readonly PreparedComputerAction[];
+  readonly computerLastAction?: ComputerActionResult;
 }
 
 export interface WorkbenchControllerListener {
@@ -32,6 +44,8 @@ export class WorkbenchController {
     sessions: [],
     timeline: [],
     browserSessions: [],
+    computerWindows: [],
+    computerPreparedActions: [],
   };
   private readonly listeners = new Set<WorkbenchControllerListener>();
   private readonly disposables: { dispose(): void }[] = [];
@@ -70,6 +84,30 @@ export class WorkbenchController {
       }),
       this.client.onEvent("browser.snapshot.changed", browserSnapshot => {
         this.update({ browserSnapshot });
+      }),
+      this.client.onEvent("computer.window.changed", window => {
+        const computerWindows = [
+          ...this.state.computerWindows.filter(item => item.identity.windowHandle !== window.identity.windowHandle),
+          window,
+        ].sort((left, right) => left.identity.windowTitle.localeCompare(right.identity.windowTitle));
+        this.update({ computerWindows });
+      }),
+      this.client.onEvent("computer.snapshot.changed", computerSnapshot => {
+        this.update({ computerSnapshot });
+      }),
+      this.client.onEvent("computer.action.prepared", action => {
+        const computerPreparedActions = [
+          ...this.state.computerPreparedActions.filter(item => item.id !== action.id),
+          action,
+        ];
+        this.update({ computerPreparedActions });
+      }),
+      this.client.onEvent("computer.action.completed", result => {
+        this.update({
+          computerLastAction: result,
+          computerSnapshot: result.afterSnapshot,
+          computerPreparedActions: this.state.computerPreparedActions.filter(item => item.id !== result.actionId),
+        });
       }),
     );
   }
@@ -224,6 +262,28 @@ export class WorkbenchController {
     const result = await this.client.request("browser.list", workspaceId === undefined ? {} : { workspaceId }, { timeoutMs: this.timeoutMs });
     this.update({ browserSessions: result.sessions });
     return result.sessions;
+  }
+
+
+  public async listComputerWindows(): Promise<readonly ComputerWindowRecord[]> {
+    const result = await this.client.request("computer.windows", {}, { timeoutMs: this.timeoutMs });
+    this.update({ computerWindows: result.windows });
+    return result.windows;
+  }
+
+  public async inspectComputerWindow(windowHandle: string): Promise<ComputerUiSnapshot> {
+    const snapshot = await this.client.request("computer.inspect", { windowHandle }, { timeoutMs: this.timeoutMs });
+    this.update({ computerSnapshot: snapshot });
+    return snapshot;
+  }
+
+  public screenshotComputer(snapshotId: string): Promise<ComputerScreenshot> {
+    return this.client.request("computer.screenshot", { snapshotId }, { timeoutMs: this.timeoutMs });
+  }
+
+  public async listComputerAudit(): Promise<readonly ComputerUseAuditEntry[]> {
+    const result = await this.client.request("computer.audit.list", {}, { timeoutMs: this.timeoutMs });
+    return result.entries;
   }
 
   private update(changes: Partial<WorkbenchControllerState>): void {

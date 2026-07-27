@@ -3,7 +3,7 @@ import { classifyNetworkAddress, isAddressAllowedForMode } from "./egress/addres
 import { chooseDownloadFileName } from "./web/download-store.js";
 import { IPC_PROTOCOL_VERSION } from "./ipc/protocol.js";
 
-if (IPC_PROTOCOL_VERSION !== 5) {
+if (Number(IPC_PROTOCOL_VERSION) < 5) {
   throw new Error("Phase 9 需要 IPC Protocol Version 5");
 }
 if (BROWSER_PROXY_PROTOCOL_VERSION !== 1) {

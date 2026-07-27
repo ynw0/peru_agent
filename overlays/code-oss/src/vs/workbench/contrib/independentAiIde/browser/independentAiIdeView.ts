@@ -21,7 +21,7 @@ import {
 	IndependentAiIdeWorkbenchSnapshot,
 } from 'vs/workbench/contrib/independentAiIde/common/independentAiIdeWorkbenchBridge';
 
-export type IndependentAiIdeViewKind = 'agent' | 'tasks' | 'permissions' | 'browser';
+export type IndependentAiIdeViewKind = 'agent' | 'tasks' | 'permissions' | 'browser' | 'computer';
 
 export class IndependentAiIdeView extends ViewPane {
 	private body: HTMLElement | undefined;
@@ -294,6 +294,52 @@ export class IndependentAiIdeView extends ViewPane {
 				}
 			}
 			root.appendChild(card);
+		}
+	}
+
+
+	private renderComputer(root: HTMLElement, snapshot: IndependentAiIdeWorkbenchSnapshot): void {
+		root.appendChild(createHeading('认证应用 Computer Use'));
+		root.appendChild(createNotice('未认证应用只能检查。点击、输入和快捷键必须由 Agent Tool 经权限中心批准。'));
+		root.appendChild(this.createActionButton('刷新窗口', () => this.requireBridge().refreshComputerWindows()));
+
+		for (const window of snapshot.computerWindows) {
+			const certification = window.certification;
+			const details = [
+				`认证：${certification.status}`,
+				`进程：${window.executableName} ${window.version}（PID ${window.processId}）`,
+				`窗口类：${window.windowClass}`,
+				`完整性：${window.integrityLevel}`,
+				window.secureDesktop ? '安全桌面：是' : '安全桌面：否',
+				...certification.reasons,
+			].join('\n');
+			const card = createCard(window.windowTitle || window.windowHandle, details);
+			if (!window.secureDesktop) {
+				card.appendChild(this.createActionButton('检查 UI Tree', () => this.requireBridge().inspectComputerWindow(window.windowHandle)));
+			}
+			root.appendChild(card);
+		}
+
+		const computerSnapshot = snapshot.computerSnapshot;
+		if (computerSnapshot === undefined) {
+			root.appendChild(createNotice('尚无 UI Automation Snapshot。'));
+			return;
+		}
+		root.appendChild(createHeading(`UI Tree：${computerSnapshot.windowTitle || computerSnapshot.windowHandle}`));
+		root.appendChild(this.createActionButton('生成取证截图', () => this.requireBridge().screenshotComputerWindow(computerSnapshot.id)));
+		for (const element of computerSnapshot.elements.slice(0, 200)) {
+			const flags = [
+				element.enabled ? 'enabled' : 'disabled',
+				element.offscreen ? 'offscreen' : 'onscreen',
+				element.isPassword ? 'password-blocked' : '',
+				...element.patterns,
+			].filter(Boolean).join(', ');
+			root.appendChild(createCard(`${element.role} · ${element.name || element.automationId || element.id}`, flags));
+		}
+
+		root.appendChild(createHeading('待权限审批动作'));
+		for (const action of snapshot.computerPreparedActions) {
+			root.appendChild(createCard(`${action.action} · ${action.applicationId}`, `${action.reason}\n过期：${action.expiresAt}`));
 		}
 	}
 

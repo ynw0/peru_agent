@@ -8,6 +8,7 @@ export const INDEPENDENT_AI_IDE_CONTAINER_IDS = {
 	tasks: 'independentAiIde.tasks',
 	permissions: 'independentAiIde.permissions',
 	browser: 'independentAiIde.browser',
+	computerUse: 'independentAiIde.computerUse',
 } as const;
 
 export const INDEPENDENT_AI_IDE_VIEW_IDS = {
@@ -15,4 +16,5 @@ export const INDEPENDENT_AI_IDE_VIEW_IDS = {
 	taskList: 'independentAiIde.taskList',
 	permissionQueue: 'independentAiIde.permissionQueue',
 	browserSession: 'independentAiIde.browserSession',
+	computerSession: 'independentAiIde.computerSession',
 } as const;

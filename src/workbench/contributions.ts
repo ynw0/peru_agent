@@ -3,7 +3,8 @@ export type WorkbenchContainerId =
   | "independentAiIde.agent"
   | "independentAiIde.tasks"
   | "independentAiIde.permissions"
-  | "independentAiIde.browser";
+  | "independentAiIde.browser"
+  | "independentAiIde.computerUse";
 
 export interface LocalizedText {
   readonly "zh-CN": string;
@@ -46,6 +47,13 @@ export const WORKBENCH_CONTAINERS: readonly WorkbenchContainerDefinition[] = [
     iconId: "globe",
     defaultLocation: "activityBar",
     order: 40,
+  },
+  {
+    id: "independentAiIde.computerUse",
+    title: { "zh-CN": "Computer Use", "en-US": "Computer Use" },
+    iconId: "device-desktop",
+    defaultLocation: "activityBar",
+    order: 50,
   },
 ];
 

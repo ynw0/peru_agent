@@ -67,10 +67,13 @@ requireAll(texts.downloadStore, [
   "sanitizeFileName",
 ], "Download Artifact Store");
 requireAll(texts.ipc, [
-  "IPC_PROTOCOL_VERSION = 5",
   'readonly "web.download"',
   'readonly "browser.download"',
-], "Typed IPC Version 5");
+], "Typed IPC 网络方法");
+const protocolMatch = texts.ipc.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/);
+if (protocolMatch === null || Number(protocolMatch[1]) < 5) {
+  throw new Error("网络与 Browser Runtime 要求 Typed IPC Version >= 5");
+}
 requireAll(texts.overlayBridge, [
   "downloadBrowser",
   "navigateBrowser",

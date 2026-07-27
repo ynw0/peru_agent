@@ -14,6 +14,7 @@
 - Phase 7：独立 FIM Completion Runtime、缓存、跨 IPC 取消、性能指标和 Code OSS 原生 Inline Completion Provider；
 - Phase 8：子 Agent 调度、预算、快照隔离、父子取消、Reviewer/Tester 门禁和 Patch 合并；
 - Phase 9：统一 Egress、WebSearch、WebFetch、受控下载和 Browser Runtime 核心。
+- Phase 10：认证应用 Computer Use、UI Tree、动作证据、权限 Tool、Typed IPC、Workbench View 和 Windows UI Automation Broker 原型。
 
 Agent Core 已支持：
 
@@ -42,6 +43,10 @@ Agent Core 已支持：
 - Egress URL/DNS/地址/重定向审核与固定 IP 传输；
 - WebFetch、SearXNG WebSearch 和受控 Artifact 下载；
 - Browser Runtime、DOM Snapshot、截图、元素证据和 Code OSS Browser View。
+- 认证应用清单、窗口/进程/签名/文件哈希绑定；
+- 未认证应用只读检查、认证应用一次性点击/输入/快捷键动作；
+- Computer Use Agent Tool 权限链、审计和动作后重新认证；
+- Code OSS Computer Use View 和 Windows UI Automation Broker C# 原型源码。
 
 ## 尚未完成
 
@@ -49,7 +54,9 @@ Agent Core 已支持：
 - 主进程到独立 Agent Runtime 的生产 IPC Transport；
 - 真实 Git Worktree、Git、LSP 和 Diagnostics 工具；
 - Windows Sandbox Broker 的 Windows 11 真机构建、运行和红队验证；
-- 真实 Browser Egress Proxy、Playwright/Chromium E2E 和 Computer Use；
+- 真实 Browser Egress Proxy和 Playwright/Chromium E2E；
+- Windows UI Automation Broker 的 Windows 11 编译、真实应用兼容性和红队验证；
+- 第一批认证应用清单签署；
 - 真实 LM Studio/vLLM FIM 端点及补全性能门禁；
 - 对真实 LM Studio、vLLM 或云端模型服务的联网集成测试。
 
@@ -80,6 +87,9 @@ npm run smoke
 - `PHASE9_REPORT.md`：Egress、Web 与 Browser Runtime 执行报告；
 - `PHASE9_BROWSER_RUNTIME_LOG.txt`：真实 Playwright/Proxy 缺失门禁记录；
 - `PHASE9_CODE_OSS_BUILD_LOG.txt`：Phase 9 Code OSS 完整编译失败记录；
+- `PHASE10_REPORT.md`：认证应用 Computer Use 执行报告；
+- `PHASE10_WINDOWS_BUILD_LOG.txt`：Windows UI Automation Broker 构建门禁日志；
+- `PHASE10_CODE_OSS_BUILD_LOG.txt`：Phase 10 Code OSS 完整编译门禁日志；
 - `docs/architecture/agent-core.md`：Agent Core 架构；
 - `docs/architecture/workspace-diff-checkpoint.md`：安全文件修改链；
 - `docs/architecture/powershell-windows-sandbox.md`：PowerShell 与 Windows 原生沙箱架构；
@@ -87,4 +97,5 @@ npm run smoke
 - `docs/architecture/low-latency-fim-completion.md`：FIM 补全、取消、缓存和指标架构；
 - `docs/architecture/subagent-scheduler-and-isolation.md`：子 Agent 调度、隔离与合并架构；
 - `docs/architecture/egress-web-browser.md`：Egress、Web、下载和 Browser Runtime 架构；
+- `docs/architecture/certified-computer-use.md`：认证应用、UI Automation、动作证据和权限边界；
 - `docs/lessons/2026-07-26-agent-runtime-ordering-and-recovery.md`：本阶段根因经验。
