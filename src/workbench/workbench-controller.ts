@@ -2,6 +2,10 @@ import type { JournalEntry } from "../agent/event-journal.js";
 import type { AgentSessionSnapshot } from "../agent/types.js";
 import type { TypedIpcClient } from "../ipc/channel.js";
 import type { WorkbenchSnapshot } from "./workbench-state.js";
+import type { BrowserDomSnapshot, BrowserSessionRecord } from "../browser/types.js";
+import type { NetworkMode } from "../agent-protocol.js";
+import type { EgressAuditEntry } from "../egress/types.js";
+import type { WebDownloadArtifact, WebFetchResult, WebSearchResult } from "../web/types.js";
 import { EMPTY_WORKBENCH_SNAPSHOT } from "./workbench-state.js";
 
 export interface WorkbenchControllerState {
@@ -11,6 +15,8 @@ export interface WorkbenchControllerState {
   readonly snapshot: WorkbenchSnapshot;
   readonly sessions: readonly AgentSessionSnapshot[];
   readonly timeline: readonly JournalEntry[];
+  readonly browserSessions: readonly BrowserSessionRecord[];
+  readonly browserSnapshot?: BrowserDomSnapshot;
 }
 
 export interface WorkbenchControllerListener {
@@ -25,6 +31,7 @@ export class WorkbenchController {
     snapshot: EMPTY_WORKBENCH_SNAPSHOT,
     sessions: [],
     timeline: [],
+    browserSessions: [],
   };
   private readonly listeners = new Set<WorkbenchControllerListener>();
   private readonly disposables: { dispose(): void }[] = [];
@@ -53,6 +60,16 @@ export class WorkbenchController {
         } else {
           this.update({ healthy: health.healthy, healthReason: health.reason });
         }
+      }),
+      this.client.onEvent("browser.session.changed", session => {
+        const browserSessions = [
+          ...this.state.browserSessions.filter(item => item.id !== session.id),
+          session,
+        ].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+        this.update({ browserSessions });
+      }),
+      this.client.onEvent("browser.snapshot.changed", browserSnapshot => {
+        this.update({ browserSnapshot });
       }),
     );
   }
@@ -147,6 +164,66 @@ export class WorkbenchController {
     const result = await this.client.request("session.events", { sessionId }, { timeoutMs: this.timeoutMs });
     this.update({ timeline: result.entries });
     return result.entries;
+  }
+
+  public async fetchWeb(url: string, mode: NetworkMode, maxChars = 50_000): Promise<WebFetchResult> {
+    return this.client.request("web.fetch", { url, mode, maxChars }, { timeoutMs: this.timeoutMs });
+  }
+
+  public async searchWeb(query: string, mode: NetworkMode, maxResults = 5): Promise<WebSearchResult> {
+    return this.client.request("web.search", { query, mode, maxResults }, { timeoutMs: this.timeoutMs });
+  }
+
+  public async downloadWeb(
+    workspaceId: string,
+    url: string,
+    mode: NetworkMode,
+    maxBytes = 16 * 1024 * 1024,
+  ): Promise<WebDownloadArtifact> {
+    return this.client.request("web.download", { workspaceId, url, mode, maxBytes }, { timeoutMs: this.timeoutMs });
+  }
+
+  public async listEgressAudit(): Promise<readonly EgressAuditEntry[]> {
+    const result = await this.client.request("egress.audit.list", {}, { timeoutMs: this.timeoutMs });
+    return result.entries;
+  }
+
+  public async createBrowser(workspaceId: string, networkMode: NetworkMode, locale: "zh-CN" | "en-US"): Promise<BrowserSessionRecord> {
+    return this.client.request("browser.create", { workspaceId, networkMode, locale }, { timeoutMs: this.timeoutMs });
+  }
+
+  public async navigateBrowser(browserSessionId: string, url: string): Promise<BrowserDomSnapshot> {
+    return this.client.request("browser.navigate", { browserSessionId, url }, { timeoutMs: this.timeoutMs });
+  }
+
+  public async refreshBrowserSnapshot(browserSessionId: string): Promise<BrowserDomSnapshot> {
+    return this.client.request("browser.snapshot", { browserSessionId }, { timeoutMs: this.timeoutMs });
+  }
+
+  public async downloadBrowser(
+    browserSessionId: string,
+    url: string,
+    maxBytes = 16 * 1024 * 1024,
+  ): Promise<WebDownloadArtifact> {
+    return this.client.request("browser.download", { browserSessionId, url, maxBytes }, { timeoutMs: this.timeoutMs });
+  }
+
+  public async clickBrowser(browserSessionId: string, snapshotId: string, elementId: string): Promise<void> {
+    await this.client.request("browser.click", { browserSessionId, snapshotId, elementId }, { timeoutMs: this.timeoutMs });
+  }
+
+  public async typeBrowser(browserSessionId: string, snapshotId: string, elementId: string, text: string): Promise<void> {
+    await this.client.request("browser.type", { browserSessionId, snapshotId, elementId, text }, { timeoutMs: this.timeoutMs });
+  }
+
+  public async closeBrowser(browserSessionId: string): Promise<void> {
+    await this.client.request("browser.close", { browserSessionId }, { timeoutMs: this.timeoutMs });
+  }
+
+  public async listBrowserSessions(workspaceId?: string): Promise<readonly BrowserSessionRecord[]> {
+    const result = await this.client.request("browser.list", workspaceId === undefined ? {} : { workspaceId }, { timeoutMs: this.timeoutMs });
+    this.update({ browserSessions: result.sessions });
+    return result.sessions;
   }
 
   private update(changes: Partial<WorkbenchControllerState>): void {

@@ -12,7 +12,8 @@
 - Phase 5：PowerShell AST、Windows Sandbox Broker 协议和原生安全原型源码；
 - Phase 6：Agent Chat、Plan、Tool、Permission、Diff、Checkpoint、Session 的交互层与 Code OSS 原生 View Overlay；
 - Phase 7：独立 FIM Completion Runtime、缓存、跨 IPC 取消、性能指标和 Code OSS 原生 Inline Completion Provider；
-- Phase 8：子 Agent 调度、预算、快照隔离、父子取消、Reviewer/Tester 门禁和 Patch 合并。
+- Phase 8：子 Agent 调度、预算、快照隔离、父子取消、Reviewer/Tester 门禁和 Patch 合并；
+- Phase 9：统一 Egress、WebSearch、WebFetch、受控下载和 Browser Runtime 核心。
 
 Agent Core 已支持：
 
@@ -37,7 +38,10 @@ Agent Core 已支持：
 - Planner、Explorer、Implementer、Reviewer、Tester 子 Agent；
 - 子 Agent 并发、深度、Token、ToolCall 和时长预算；
 - 快照式隔离工作区、父会话取消和中断恢复；
-- Reviewer + Tester 双门禁与父工作区 Diff Proposal 合并。
+- Reviewer + Tester 双门禁与父工作区 Diff Proposal 合并；
+- Egress URL/DNS/地址/重定向审核与固定 IP 传输；
+- WebFetch、SearXNG WebSearch 和受控 Artifact 下载；
+- Browser Runtime、DOM Snapshot、截图、元素证据和 Code OSS Browser View。
 
 ## 尚未完成
 
@@ -45,7 +49,7 @@ Agent Core 已支持：
 - 主进程到独立 Agent Runtime 的生产 IPC Transport；
 - 真实 Git Worktree、Git、LSP 和 Diagnostics 工具；
 - Windows Sandbox Broker 的 Windows 11 真机构建、运行和红队验证；
-- 真实 Browser Runtime 和 Computer Use；
+- 真实 Browser Egress Proxy、Playwright/Chromium E2E 和 Computer Use；
 - 真实 LM Studio/vLLM FIM 端点及补全性能门禁；
 - 对真实 LM Studio、vLLM 或云端模型服务的联网集成测试。
 
@@ -73,10 +77,14 @@ npm run smoke
 - `PHASE7_REPORT.md`：低延迟 FIM 补全执行报告；
 - `PHASE8_REPORT.md`：子 Agent 调度、隔离与 Patch 合并执行报告；
 - `PHASE8_CODE_OSS_BUILD_LOG.txt`：Phase 8 Code OSS 完整编译失败记录；
+- `PHASE9_REPORT.md`：Egress、Web 与 Browser Runtime 执行报告；
+- `PHASE9_BROWSER_RUNTIME_LOG.txt`：真实 Playwright/Proxy 缺失门禁记录；
+- `PHASE9_CODE_OSS_BUILD_LOG.txt`：Phase 9 Code OSS 完整编译失败记录；
 - `docs/architecture/agent-core.md`：Agent Core 架构；
 - `docs/architecture/workspace-diff-checkpoint.md`：安全文件修改链；
 - `docs/architecture/powershell-windows-sandbox.md`：PowerShell 与 Windows 原生沙箱架构；
 - `docs/architecture/ai-ide-interaction.md`：Agent Chat、Plan、Permission、Diff 与会话交互架构；
 - `docs/architecture/low-latency-fim-completion.md`：FIM 补全、取消、缓存和指标架构；
 - `docs/architecture/subagent-scheduler-and-isolation.md`：子 Agent 调度、隔离与合并架构；
+- `docs/architecture/egress-web-browser.md`：Egress、Web、下载和 Browser Runtime 架构；
 - `docs/lessons/2026-07-26-agent-runtime-ordering-and-recovery.md`：本阶段根因经验。

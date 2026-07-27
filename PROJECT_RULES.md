@@ -118,3 +118,21 @@
 - queued/running 恢复时必须明确标记中断失败；持久化校验应允许可安全收敛的崩溃窗口中间状态。
 - 清理隔离目录后必须同时移除持久化 Worktree 引用，禁止重启时恢复失效路径。
 - Git Worktree 和 Git Tool 在 Windows Sandbox Broker 真机门禁完成前禁止启用，快照式隔离不得冒充 Git Worktree。
+
+
+## Egress、Web 与 Browser 规则
+
+- 所有 WebSearch、WebFetch、下载和 Browser HTTP/HTTPS 资源必须通过统一 Egress Broker，禁止 Tool、View 或 Driver 直接联网。
+- 网络授权必须校验规范 URL、端口和 DNS 返回的全部地址；混合公网/私网、Loopback、链路本地、元数据和保留地址必须拒绝。
+- Egress 授权必须一次性、短时有效并绑定 URL 哈希和已审核 IP；传输阶段禁止重新 DNS 解析。
+- 每个 HTTP 重定向必须重新审核；跨源时必须删除 Authorization、Cookie 和其他认证凭据。
+- IPv6 字面量在地址分类、Socket 和代理校验前必须去除 URL 方括号并规范化。
+- 响应大小、超时和取消只能结算一次；销毁流时禁止再次注入 Error 造成未处理异常。
+- WebFetch 必须分离 HTML 标题和正文，并在正文预算前删除 head、script、style、noscript 和注释。
+- WebSearch 必须使用显式配置和验证过的 Provider；Provider 缺失或响应不合法时明确失败，禁止切换搜索源。
+- 远端下载只能写入产品管理的 Artifact 根目录；文件名必须清理，使用临时文件和原子 rename，禁止自动执行或解压。
+- Browser Driver 必须声明并实际使用 Broker Proxy；本机 URL 不能作为代理身份证明，启动 Chromium 前必须完成固定协议能力握手。
+- Browser 会话必须使用独立 AbortController，禁止复用一次 IPC 请求的取消信号作为长期会话生命周期。
+- DOM 动作必须绑定 Snapshot ID、元素 ID、role、accessible name 和 disabled 证据，并在动作前复核、动作后返回新证据。
+- Workbench Browser View 只能通过 Bridge 和 Typed IPC 操作，禁止导入文件系统、进程、Fetch、XMLHttpRequest 或 WebSocket。
+- 真实 Browser Proxy、Playwright 和 Chromium E2E 未通过前，产品不得宣称浏览器可以安全联网。

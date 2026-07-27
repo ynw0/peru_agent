@@ -1,0 +1,10 @@
+Phase 9 Browser runtime dependency check
+Date: 2026-07-27T01:06:49Z
+Node: v22.16.0
+Command: import('playwright-core')
+
+Cannot find package 'playwright-core' imported from /mnt/data/phase9_repo/[eval1]
+
+PLAYWRIGHT_IMPORT_EXIT_CODE=1
+BROWSER_PROXY_SERVICE=NOT_IMPLEMENTED
+RESULT=REAL_BROWSER_NOT_RUN

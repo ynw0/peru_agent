@@ -119,7 +119,7 @@ export class IndependentAiIdeView extends ViewPane {
 				this.renderPermissions(root, this.snapshot);
 				break;
 			case 'browser':
-				root.appendChild(createNotice('受控浏览器将在网络与 Browser Runtime 阶段启用。'));
+				this.renderBrowser(root, this.snapshot);
 				break;
 		}
 	}
@@ -219,6 +219,79 @@ export class IndependentAiIdeView extends ViewPane {
 			const card = createCard(checkpoint.checkpointId, checkpoint.restored ? '已恢复' : '可恢复');
 			if (!checkpoint.restored) {
 				card.appendChild(this.createActionButton('恢复', () => this.requireBridge().restoreCheckpoint(checkpoint.checkpointId)));
+			}
+			root.appendChild(card);
+		}
+	}
+
+
+	private renderBrowser(root: HTMLElement, snapshot: IndependentAiIdeWorkbenchSnapshot): void {
+		root.appendChild(createHeading('受控 Chromium'));
+		const workspaceInput = document.createElement('input');
+		workspaceInput.placeholder = 'Workspace ID';
+		workspaceInput.value = snapshot.activeSessionId === undefined ? 'workspace' : 'workspace';
+		root.appendChild(workspaceInput);
+		const mode = document.createElement('select');
+		for (const value of ['offline', 'lan', 'internet'] as const) {
+			const option = document.createElement('option');
+			option.value = value;
+			option.textContent = value;
+			mode.appendChild(option);
+		}
+		root.appendChild(mode);
+		root.appendChild(this.createActionButton('创建受控浏览器', () => this.requireBridge().createBrowser(
+			workspaceInput.value.trim(),
+			mode.value as 'offline' | 'lan' | 'internet',
+			'zh-CN',
+		)));
+
+		for (const session of snapshot.browserSessions) {
+			const card = createCard(
+				session.title ?? session.id,
+				`状态：${session.status}\n网络：${session.networkMode}\nURL：${session.currentUrl ?? '-'}${session.error === undefined ? '' : `\n错误：${session.error.message}`}`,
+			);
+			if (session.status !== 'closed' && session.status !== 'failed') {
+				const urlInput = document.createElement('input');
+				urlInput.placeholder = 'https://example.com';
+				urlInput.value = session.currentUrl ?? '';
+				card.appendChild(urlInput);
+				card.appendChild(this.createActionButton('导航', () => this.requireBridge().navigateBrowser(session.id, urlInput.value.trim())));
+				card.appendChild(this.createActionButton('受控下载', () => this.requireBridge().downloadBrowser(session.id, urlInput.value.trim())));
+				card.appendChild(this.createActionButton('刷新 DOM', () => this.requireBridge().refreshBrowserSnapshot(session.id)));
+				card.appendChild(this.createActionButton('关闭', () => this.requireBridge().closeBrowser(session.id)));
+			}
+			root.appendChild(card);
+		}
+
+		const browserSnapshot = snapshot.browserSnapshot;
+		if (browserSnapshot === undefined) {
+			root.appendChild(createNotice('尚无 DOM Snapshot。浏览器只能通过 Broker Proxy 联网。'));
+			return;
+		}
+		root.appendChild(createHeading(`DOM：${browserSnapshot.title}`));
+		const summary = createElement('pre');
+		summary.textContent = browserSnapshot.text.slice(0, 4000);
+		summary.style.whiteSpace = 'pre-wrap';
+		root.appendChild(summary);
+		for (const element of browserSnapshot.elements.slice(0, 100)) {
+			const card = createCard(`${element.role} · ${element.name || element.id}`, element.value ?? '');
+			if (!element.disabled) {
+				card.appendChild(this.createActionButton('点击', () => this.requireBridge().clickBrowser(
+					browserSnapshot.sessionId,
+					browserSnapshot.id,
+					element.id,
+				)));
+				if (element.role === 'input' || element.role === 'textarea' || element.role === 'textbox') {
+					const textInput = document.createElement('input');
+					textInput.placeholder = '输入文本';
+					card.appendChild(textInput);
+					card.appendChild(this.createActionButton('输入', () => this.requireBridge().typeBrowser(
+						browserSnapshot.sessionId,
+						browserSnapshot.id,
+						element.id,
+						textInput.value,
+					)));
+				}
 			}
 			root.appendChild(card);
 		}

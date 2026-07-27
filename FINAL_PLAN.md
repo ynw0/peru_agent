@@ -370,13 +370,21 @@ Windows Native Brokers
 
 ### Phase 9：网络、搜索和浏览器
 
-置信度：91/100
+置信度：90/100
 
-- 三种网络模式；
-- Egress Broker；
-- WebSearch、WebFetch；
-- Playwright Chromium；
-- DOM、截图、下载和动作验证。
+- [x] offline、lan、internet 三种网络模式和地址分类；
+- [x] URL、端口、DNS 全地址、单次授权和出口审计；
+- [x] 固定 IP Node HTTP Transport；
+- [x] 每次重定向重新审核和跨源凭据清理；
+- [x] WebFetch、SearXNG WebSearch 和受控 Download Artifact；
+- [x] Browser Runtime、DOM Snapshot、截图和动作证据；
+- [x] Playwright Chromium Driver 契约和 Route 授权；
+- [x] Browser Proxy 能力握手；
+- [x] Typed IPC Version 5 和 Code OSS Browser View；
+- [ ] 真实 Browser Egress Proxy 服务；
+- [ ] 安装 `playwright-core` 和固定 Chromium 后完成真实 E2E；
+- [ ] 真实公网、复杂站点、恶意下载和压力测试；
+- [ ] 生产 IPC Transport 安装。
 
 ### Phase 10：认证应用 Computer Use
 
@@ -489,6 +497,6 @@ Windows Native Brokers
 - [ ] 全局门禁：安装主进程到独立 Agent Runtime 的生产 IPC Transport；
 - [x] Phase 7：低延迟 FIM 代码补全 Runtime、缓存、取消、指标和 Code OSS Inline Completion Overlay；
 - [x] Phase 8：子 Agent 调度、预算、快照隔离、Reviewer/Tester 门禁和 Patch 合并；
-- [ ] Phase 9：网络、搜索和浏览器；
+- [x] Phase 9：Egress Broker、WebSearch/WebFetch、受控下载和 Browser Runtime 核心；
 - [ ] Phase 10：认证应用 Computer Use；
 - [ ] Phase 11：Tool/Skill 自进化、发布与强化。

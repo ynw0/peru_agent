@@ -68,6 +68,34 @@ export interface IndependentAiIdeSubagentView {
 	readonly error?: { readonly code: string; readonly message: string };
 }
 
+export interface IndependentAiIdeBrowserSessionView {
+	readonly id: string;
+	readonly workspaceId: string;
+	readonly networkMode: 'offline' | 'lan' | 'internet';
+	readonly status: 'starting' | 'ready' | 'navigating' | 'failed' | 'closed';
+	readonly currentUrl?: string;
+	readonly title?: string;
+	readonly lastSnapshotId?: string;
+	readonly error?: { readonly code: string; readonly message: string };
+}
+
+export interface IndependentAiIdeBrowserElementView {
+	readonly id: string;
+	readonly role: string;
+	readonly name: string;
+	readonly value?: string;
+	readonly disabled: boolean;
+}
+
+export interface IndependentAiIdeBrowserSnapshotView {
+	readonly id: string;
+	readonly sessionId: string;
+	readonly url: string;
+	readonly title: string;
+	readonly text: string;
+	readonly elements: readonly IndependentAiIdeBrowserElementView[];
+}
+
 export interface IndependentAiIdeWorkbenchSnapshot {
 	readonly activeSessionId?: string;
 	readonly sessionStatus: IndependentAiIdeSessionStatus;
@@ -78,6 +106,8 @@ export interface IndependentAiIdeWorkbenchSnapshot {
 	readonly diffProposals: readonly IndependentAiIdeDiffView[];
 	readonly checkpoints: readonly IndependentAiIdeCheckpointView[];
 	readonly subagents: readonly IndependentAiIdeSubagentView[];
+	readonly browserSessions: readonly IndependentAiIdeBrowserSessionView[];
+	readonly browserSnapshot?: IndependentAiIdeBrowserSnapshotView;
 	readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
 	readonly failed?: { readonly code: string; readonly message: string };
 }
@@ -93,6 +123,13 @@ export interface IndependentAiIdeWorkbenchBridge {
 	acceptDiff(proposalId: string): Promise<void>;
 	rejectDiff(proposalId: string): Promise<void>;
 	restoreCheckpoint(checkpointId: string): Promise<void>;
+	createBrowser(workspaceId: string, networkMode: 'offline' | 'lan' | 'internet', locale: 'zh-CN' | 'en-US'): Promise<void>;
+	navigateBrowser(browserSessionId: string, url: string): Promise<void>;
+	refreshBrowserSnapshot(browserSessionId: string): Promise<void>;
+	downloadBrowser(browserSessionId: string, url: string, maxBytes?: number): Promise<void>;
+	clickBrowser(browserSessionId: string, snapshotId: string, elementId: string): Promise<void>;
+	typeBrowser(browserSessionId: string, snapshotId: string, elementId: string, text: string): Promise<void>;
+	closeBrowser(browserSessionId: string): Promise<void>;
 }
 
 let installedBridge: IndependentAiIdeWorkbenchBridge | undefined;

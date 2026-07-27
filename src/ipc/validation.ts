@@ -49,12 +49,27 @@ const REQUEST_METHODS: ReadonlySet<string> = new Set<IpcRequestMethod>([
   "subagent.list",
   "subagent.proposeMerge",
   "subagent.finalizeMerge",
+  "egress.audit.list",
+  "web.fetch",
+  "web.search",
+  "web.download",
+  "browser.create",
+  "browser.navigate",
+  "browser.snapshot",
+  "browser.screenshot",
+  "browser.download",
+  "browser.click",
+  "browser.type",
+  "browser.close",
+  "browser.list",
 ]);
 
 const EVENT_METHODS: ReadonlySet<string> = new Set<IpcEventMethod>([
   "agent.event",
   "workbench.snapshot.changed",
   "runtime.health.changed",
+  "browser.session.changed",
+  "browser.snapshot.changed",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -161,6 +176,57 @@ export function isRequestParams(method: IpcRequestMethod, value: unknown): boole
         && isNonEmptyString(value.taskId)
         && isStringArray(value.gateTaskIds)
         && value.gateTaskIds.length >= 2;
+    case "egress.audit.list":
+      return hasOnlyKeys(value, []);
+    case "web.fetch":
+      return hasOnlyKeys(value, ["url", "mode", "maxChars"])
+        && isNonEmptyString(value.url)
+        && isNetworkMode(value.mode)
+        && (value.maxChars === undefined || (isPositiveInteger(value.maxChars) && Number(value.maxChars) <= 200_000));
+    case "web.search":
+      return hasOnlyKeys(value, ["query", "mode", "maxResults"])
+        && isNonEmptyString(value.query)
+        && String(value.query).length <= 500
+        && isNetworkMode(value.mode)
+        && (value.maxResults === undefined || (isPositiveInteger(value.maxResults) && Number(value.maxResults) <= 20));
+    case "web.download":
+      return hasOnlyKeys(value, ["workspaceId", "url", "mode", "maxBytes"])
+        && isNonEmptyString(value.workspaceId)
+        && isNonEmptyString(value.url)
+        && isNetworkMode(value.mode)
+        && (value.maxBytes === undefined || (isPositiveInteger(value.maxBytes) && Number(value.maxBytes) <= 32 * 1024 * 1024));
+    case "browser.create":
+      return hasOnlyKeys(value, ["workspaceId", "networkMode", "locale"])
+        && isNonEmptyString(value.workspaceId)
+        && isNetworkMode(value.networkMode)
+        && (value.locale === "zh-CN" || value.locale === "en-US");
+    case "browser.navigate":
+      return hasOnlyKeys(value, ["browserSessionId", "url"])
+        && isNonEmptyString(value.browserSessionId)
+        && isNonEmptyString(value.url);
+    case "browser.snapshot":
+    case "browser.screenshot":
+    case "browser.close":
+      return hasOnlyKeys(value, ["browserSessionId"]) && isNonEmptyString(value.browserSessionId);
+    case "browser.download":
+      return hasOnlyKeys(value, ["browserSessionId", "url", "maxBytes"])
+        && isNonEmptyString(value.browserSessionId)
+        && isNonEmptyString(value.url)
+        && (value.maxBytes === undefined || (isPositiveInteger(value.maxBytes) && Number(value.maxBytes) <= 32 * 1024 * 1024));
+    case "browser.click":
+      return hasOnlyKeys(value, ["browserSessionId", "snapshotId", "elementId"])
+        && isNonEmptyString(value.browserSessionId)
+        && isNonEmptyString(value.snapshotId)
+        && isNonEmptyString(value.elementId);
+    case "browser.type":
+      return hasOnlyKeys(value, ["browserSessionId", "snapshotId", "elementId", "text"])
+        && isNonEmptyString(value.browserSessionId)
+        && isNonEmptyString(value.snapshotId)
+        && isNonEmptyString(value.elementId)
+        && isNonEmptyString(value.text)
+        && String(value.text).length <= 10_000;
+    case "browser.list":
+      return hasOnlyKeys(value, ["workspaceId"]) && isOptionalNonEmptyString(value.workspaceId);
   }
 }
 
@@ -229,6 +295,29 @@ export function isResponseResult(method: IpcRequestMethod, value: unknown): bool
       return isRecord(value) && typeof value.aborted === "boolean";
     case "subagent.list":
       return isRecord(value) && Array.isArray(value.tasks) && value.tasks.every(isSubagentTaskRecord);
+    case "egress.audit.list":
+      return isRecord(value) && Array.isArray(value.entries) && value.entries.every(isEgressAuditEntry);
+    case "web.fetch":
+      return isWebFetchResult(value);
+    case "web.search":
+      return isWebSearchResult(value);
+    case "web.download":
+      return isWebDownloadArtifact(value);
+    case "browser.create":
+    case "browser.close":
+      return isBrowserSessionRecord(value);
+    case "browser.navigate":
+    case "browser.snapshot":
+      return isBrowserDomSnapshot(value);
+    case "browser.screenshot":
+      return isBrowserScreenshot(value);
+    case "browser.download":
+      return isWebDownloadArtifact(value);
+    case "browser.click":
+    case "browser.type":
+      return isBrowserActionResult(value);
+    case "browser.list":
+      return isRecord(value) && Array.isArray(value.sessions) && value.sessions.every(isBrowserSessionRecord);
   }
 }
 
@@ -755,7 +844,132 @@ function isEventPayload(method: IpcEventMethod, value: unknown): boolean {
       return isRecord(value)
         && typeof value.healthy === "boolean"
         && (value.reason === undefined || typeof value.reason === "string");
+    case "browser.session.changed":
+      return isBrowserSessionRecord(value);
+    case "browser.snapshot.changed":
+      return isBrowserDomSnapshot(value);
   }
+}
+
+
+function isNetworkMode(value: unknown): boolean {
+  return value === "offline" || value === "lan" || value === "internet";
+}
+
+function isEgressAuditEntry(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && isNonEmptyString(value.timestamp)
+    && isNonEmptyString(value.purpose)
+    && isNetworkMode(value.mode)
+    && isNonEmptyString(value.method)
+    && isNonEmptyString(value.redactedUrl)
+    && isNonEmptyString(value.hostname)
+    && isNonNegativeInteger(value.port)
+    && isStringArray(value.addresses)
+    && (value.selectedAddress === undefined || isNonEmptyString(value.selectedAddress))
+    && (value.decision === "allowed" || value.decision === "denied" || value.decision === "completed" || value.decision === "failed")
+    && isNonEmptyString(value.reason)
+    && (value.status === undefined || isNonNegativeInteger(value.status))
+    && (value.byteLength === undefined || isNonNegativeInteger(value.byteLength));
+}
+
+function isWebDownloadArtifact(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && isNonEmptyString(value.workspaceId)
+    && isNonEmptyString(value.fileName)
+    && isNonEmptyString(value.relativePath)
+    && isNonEmptyString(value.sourceUrl)
+    && isNonEmptyString(value.contentType)
+    && isNonNegativeInteger(value.byteLength)
+    && isSha256(value.sha256)
+    && isNonEmptyString(value.createdAt);
+}
+
+function isWebFetchResult(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.url)
+    && isNonNegativeInteger(value.status)
+    && isNonEmptyString(value.contentType)
+    && (value.title === undefined || typeof value.title === "string")
+    && typeof value.text === "string"
+    && typeof value.truncated === "boolean"
+    && isNonNegativeInteger(value.byteLength)
+    && Array.isArray(value.redirects)
+    && value.redirects.every(hop => isRecord(hop)
+      && isNonEmptyString(hop.fromUrl)
+      && isNonEmptyString(hop.toUrl)
+      && isNonNegativeInteger(hop.status));
+}
+
+function isWebSearchResult(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.query)
+    && isNonEmptyString(value.provider)
+    && Array.isArray(value.results)
+    && value.results.every(item => isRecord(item)
+      && isNonEmptyString(item.title)
+      && isNonEmptyString(item.url)
+      && isNonEmptyString(item.snippet)
+      && (item.source === undefined || typeof item.source === "string"));
+}
+
+function isBrowserSessionRecord(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && isNonEmptyString(value.workspaceId)
+    && isNetworkMode(value.networkMode)
+    && (value.status === "starting" || value.status === "ready" || value.status === "navigating"
+      || value.status === "failed" || value.status === "closed")
+    && (value.currentUrl === undefined || isNonEmptyString(value.currentUrl))
+    && (value.title === undefined || typeof value.title === "string")
+    && (value.lastSnapshotId === undefined || isNonEmptyString(value.lastSnapshotId))
+    && isNonEmptyString(value.createdAt)
+    && isNonEmptyString(value.updatedAt)
+    && (value.error === undefined || (isRecord(value.error)
+      && isNonEmptyString(value.error.code)
+      && isNonEmptyString(value.error.message)));
+}
+
+function isBrowserElementSnapshot(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && isNonEmptyString(value.role)
+    && typeof value.name === "string"
+    && (value.value === undefined || typeof value.value === "string")
+    && typeof value.disabled === "boolean";
+}
+
+function isBrowserDomSnapshot(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && isNonEmptyString(value.sessionId)
+    && isNonEmptyString(value.url)
+    && typeof value.title === "string"
+    && typeof value.text === "string"
+    && Array.isArray(value.elements)
+    && value.elements.every(isBrowserElementSnapshot)
+    && isSha256(value.sha256)
+    && isNonEmptyString(value.createdAt);
+}
+
+function isBrowserScreenshot(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.sessionId)
+    && isNonEmptyString(value.snapshotId)
+    && value.mimeType === "image/png"
+    && typeof value.base64 === "string"
+    && isNonNegativeInteger(value.byteLength)
+    && isSha256(value.sha256);
+}
+
+function isBrowserActionResult(value: unknown): boolean {
+  return isRecord(value)
+    && value.verified === true
+    && isNonEmptyString(value.beforeSnapshotId)
+    && isBrowserDomSnapshot(value.afterSnapshot)
+    && (value.action === "click" || value.action === "type");
 }
 
 export function isIpcMessage(value: unknown): value is IpcMessage {

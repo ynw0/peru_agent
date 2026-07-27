@@ -12,6 +12,14 @@ import type { DiffProposal } from "../diff/diff-manager.js";
 import type { PlanRecord } from "../plan/plan-manager.js";
 import type { SubagentTaskRecord, SubagentTaskRequest } from "../subagent/types.js";
 import type { WorkspaceFileSnapshot } from "../workspace/types.js";
+import type { EgressAuditEntry } from "../egress/types.js";
+import type { WebDownloadArtifact, WebFetchResult, WebSearchResult } from "../web/types.js";
+import type {
+  BrowserActionResult,
+  BrowserDomSnapshot,
+  BrowserScreenshot,
+  BrowserSessionRecord,
+} from "../browser/types.js";
 import type {
   CompletionCandidate,
   CompletionDocumentInput,
@@ -20,7 +28,7 @@ import type {
 } from "../completion/types.js";
 
 // IPC 协议版本必须显式匹配；版本不一致时拒绝连接，不做隐式兼容。
-export const IPC_PROTOCOL_VERSION = 4 as const;
+export const IPC_PROTOCOL_VERSION = 5 as const;
 
 export interface RuntimeInitializeRequest {
   readonly protocolVersion: typeof IPC_PROTOCOL_VERSION;
@@ -151,6 +159,41 @@ export interface ProposeSubagentMergeRequest {
   readonly taskId: string;
   readonly gateTaskIds: readonly string[];
 }
+
+export interface WebFetchRequest {
+  readonly url: string;
+  readonly mode: NetworkMode;
+  readonly maxChars?: number;
+}
+
+export interface WebSearchRequest {
+  readonly query: string;
+  readonly mode: NetworkMode;
+  readonly maxResults?: number;
+}
+
+export interface WebDownloadRequest {
+  readonly workspaceId: string;
+  readonly url: string;
+  readonly mode: NetworkMode;
+  readonly maxBytes?: number;
+}
+
+export interface BrowserCreateIpcRequest {
+  readonly workspaceId: string;
+  readonly networkMode: NetworkMode;
+  readonly locale: "zh-CN" | "en-US";
+}
+
+export interface BrowserSessionIpcRequest { readonly browserSessionId: string }
+export interface BrowserNavigateIpcRequest extends BrowserSessionIpcRequest { readonly url: string }
+export interface BrowserDownloadIpcRequest extends BrowserSessionIpcRequest { readonly url: string; readonly maxBytes?: number }
+export interface BrowserTargetIpcRequest extends BrowserSessionIpcRequest {
+  readonly snapshotId: string;
+  readonly elementId: string;
+}
+export interface BrowserTypeIpcRequest extends BrowserTargetIpcRequest { readonly text: string }
+export interface BrowserListIpcRequest { readonly workspaceId?: string }
 
 
 // 请求方法表同时定义参数和返回值，是 Typed IPC 的唯一事实来源。
@@ -287,6 +330,58 @@ export interface IpcRequestMap {
     readonly params: SubagentTaskRequestById;
     readonly result: SubagentTaskRecord;
   };
+  readonly "egress.audit.list": {
+    readonly params: Record<string, never>;
+    readonly result: { readonly entries: readonly EgressAuditEntry[] };
+  };
+  readonly "web.fetch": {
+    readonly params: WebFetchRequest;
+    readonly result: WebFetchResult;
+  };
+  readonly "web.search": {
+    readonly params: WebSearchRequest;
+    readonly result: WebSearchResult;
+  };
+  readonly "web.download": {
+    readonly params: WebDownloadRequest;
+    readonly result: WebDownloadArtifact;
+  };
+  readonly "browser.create": {
+    readonly params: BrowserCreateIpcRequest;
+    readonly result: BrowserSessionRecord;
+  };
+  readonly "browser.navigate": {
+    readonly params: BrowserNavigateIpcRequest;
+    readonly result: BrowserDomSnapshot;
+  };
+  readonly "browser.snapshot": {
+    readonly params: BrowserSessionIpcRequest;
+    readonly result: BrowserDomSnapshot;
+  };
+  readonly "browser.screenshot": {
+    readonly params: BrowserSessionIpcRequest;
+    readonly result: BrowserScreenshot;
+  };
+  readonly "browser.download": {
+    readonly params: BrowserDownloadIpcRequest;
+    readonly result: WebDownloadArtifact;
+  };
+  readonly "browser.click": {
+    readonly params: BrowserTargetIpcRequest;
+    readonly result: BrowserActionResult;
+  };
+  readonly "browser.type": {
+    readonly params: BrowserTypeIpcRequest;
+    readonly result: BrowserActionResult;
+  };
+  readonly "browser.close": {
+    readonly params: BrowserSessionIpcRequest;
+    readonly result: BrowserSessionRecord;
+  };
+  readonly "browser.list": {
+    readonly params: BrowserListIpcRequest;
+    readonly result: { readonly sessions: readonly BrowserSessionRecord[] };
+  };
 }
 
 export interface IpcEventMap {
@@ -296,6 +391,8 @@ export interface IpcEventMap {
     readonly healthy: boolean;
     readonly reason?: string;
   };
+  readonly "browser.session.changed": BrowserSessionRecord;
+  readonly "browser.snapshot.changed": BrowserDomSnapshot;
 }
 
 export type IpcRequestMethod = keyof IpcRequestMap;
