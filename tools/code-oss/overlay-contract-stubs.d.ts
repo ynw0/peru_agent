@@ -2,6 +2,7 @@
 declare module 'vs/base/common/codicons' {
   export class Codicon {
     static readonly hubot: Codicon;
+    static readonly beaker: Codicon;
     static readonly checklist: Codicon;
     static readonly shield: Codicon;
     static readonly globe: Codicon;

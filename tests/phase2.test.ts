@@ -21,12 +21,13 @@ test("产品品牌、协议和数据目录使用独立命名", () => {
   assert.equal(PRODUCT_MANIFEST.dataFolderName, ".independent-ai-ide");
 });
 
-test("五个 AI IDE Workbench 容器位置符合计划", () => {
+test("六个 AI IDE Workbench 容器位置符合计划", () => {
   const locations = new Map(WORKBENCH_CONTAINERS.map(container => [container.id, container.defaultLocation]));
-  assert.equal(WORKBENCH_CONTAINERS.length, 5);
+  assert.equal(WORKBENCH_CONTAINERS.length, 6);
   assert.equal(locations.get("independentAiIde.agent"), "activityBar");
   assert.equal(locations.get("independentAiIde.browser"), "activityBar");
   assert.equal(locations.get("independentAiIde.computerUse"), "activityBar");
+  assert.equal(locations.get("independentAiIde.evolution"), "activityBar");
   assert.equal(locations.get("independentAiIde.tasks"), "panel");
   assert.equal(locations.get("independentAiIde.permissions"), "panel");
 });

@@ -1,7 +1,21 @@
 // 当前执行环境没有安装 @types/node，因此只声明项目实际使用的 Node.js 标准模块。
 // 正式依赖安装成功后应删除该文件，统一使用锁定版本的 @types/node。
 
+declare class Buffer extends Uint8Array {
+  static from(data: string, encoding: "utf8" | "base64"): Buffer;
+  static from(data: Uint8Array): Buffer;
+  toString(encoding?: "base64" | "utf8"): string;
+}
+
 declare module "node:crypto" {
+  export interface KeyObject {
+    export(options: { type: "pkcs8" | "spki"; format: "pem" }): string | Uint8Array;
+  }
+  export function createPrivateKey(key: string): KeyObject;
+  export function createPublicKey(key: string): KeyObject;
+  export function generateKeyPairSync(algorithm: "ed25519"): { publicKey: KeyObject; privateKey: KeyObject };
+  export function sign(algorithm: null, data: Uint8Array, key: KeyObject): Buffer;
+  export function verify(algorithm: null, data: Uint8Array, key: KeyObject, signature: Uint8Array): boolean;
   interface Hash {
     update(data: string, inputEncoding: "utf8"): Hash;
     update(data: Uint8Array): Hash;

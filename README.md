@@ -14,7 +14,8 @@
 - Phase 7：独立 FIM Completion Runtime、缓存、跨 IPC 取消、性能指标和 Code OSS 原生 Inline Completion Provider；
 - Phase 8：子 Agent 调度、预算、快照隔离、父子取消、Reviewer/Tester 门禁和 Patch 合并；
 - Phase 9：统一 Egress、WebSearch、WebFetch、受控下载和 Browser Runtime 核心。
-- Phase 10：认证应用 Computer Use、UI Tree、动作证据、权限 Tool、Typed IPC、Workbench View 和 Windows UI Automation Broker 原型。
+- Phase 10：认证应用 Computer Use、UI Tree、动作证据、权限 Tool、Typed IPC、Workbench View 和 Windows UI Automation Broker 原型；
+- Phase 11：Capability Gap、Tool/Skill Forge、验证流水线、Ed25519 签名白名单、人工审批、停用和回滚。
 
 Agent Core 已支持：
 
@@ -46,7 +47,13 @@ Agent Core 已支持：
 - 认证应用清单、窗口/进程/签名/文件哈希绑定；
 - 未认证应用只读检查、认证应用一次性点击/输入/快捷键动作；
 - Computer Use Agent Tool 权限链、审计和动作后重新认证；
-- Code OSS Computer Use View 和 Windows UI Automation Broker C# 原型源码。
+- Code OSS Computer Use View 和 Windows UI Automation Broker C# 原型源码；
+- Capability Gap 聚合和敏感证据清理；
+- Tool/Skill 候选 Forge、Candidate Registry 和状态机；
+- 静态分析、隔离证明、双 Reviewer 和完整 Validation Gate；
+- Ed25519 Candidate Artifact、Whitelist Decision 签名、可独立验签 Signed Whitelist；
+- 低风险自动晋级、高权限人工审批、停用和回滚；
+- Code OSS Candidate Center 和 Evolution Typed IPC。
 
 ## 尚未完成
 
@@ -58,7 +65,8 @@ Agent Core 已支持：
 - Windows UI Automation Broker 的 Windows 11 编译、真实应用兼容性和红队验证；
 - 第一批认证应用清单签署；
 - 真实 LM Studio/vLLM FIM 端点及补全性能门禁；
-- 对真实 LM Studio、vLLM 或云端模型服务的联网集成测试。
+- 对真实 LM Studio、vLLM 或云端模型服务的联网集成测试；
+- 真实 Candidate Sandbox Evaluator、Tool SDK、Signed Candidate Loader 和生产密钥托管。
 
 ## 核心项目门禁
 
@@ -90,6 +98,8 @@ npm run smoke
 - `PHASE10_REPORT.md`：认证应用 Computer Use 执行报告；
 - `PHASE10_WINDOWS_BUILD_LOG.txt`：Windows UI Automation Broker 构建门禁日志；
 - `PHASE10_CODE_OSS_BUILD_LOG.txt`：Phase 10 Code OSS 完整编译门禁日志；
+- `PHASE11_REPORT.md`：Tool/Skill 自进化候选系统执行报告；
+- `PHASE11_CODE_OSS_BUILD_LOG.txt`：Phase 11 Code OSS 完整编译门禁日志；
 - `docs/architecture/agent-core.md`：Agent Core 架构；
 - `docs/architecture/workspace-diff-checkpoint.md`：安全文件修改链；
 - `docs/architecture/powershell-windows-sandbox.md`：PowerShell 与 Windows 原生沙箱架构；
@@ -98,4 +108,5 @@ npm run smoke
 - `docs/architecture/subagent-scheduler-and-isolation.md`：子 Agent 调度、隔离与合并架构；
 - `docs/architecture/egress-web-browser.md`：Egress、Web、下载和 Browser Runtime 架构；
 - `docs/architecture/certified-computer-use.md`：认证应用、UI Automation、动作证据和权限边界；
+- `docs/architecture/tool-skill-evolution.md`：Capability Gap、Forge、验证、签名白名单和晋级架构；
 - `docs/lessons/2026-07-26-agent-runtime-ordering-and-recovery.md`：本阶段根因经验。

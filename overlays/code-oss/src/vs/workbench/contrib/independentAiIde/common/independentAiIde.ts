@@ -9,6 +9,7 @@ export const INDEPENDENT_AI_IDE_CONTAINER_IDS = {
 	permissions: 'independentAiIde.permissions',
 	browser: 'independentAiIde.browser',
 	computerUse: 'independentAiIde.computerUse',
+	evolution: 'independentAiIde.evolution',
 } as const;
 
 export const INDEPENDENT_AI_IDE_VIEW_IDS = {
@@ -17,4 +18,5 @@ export const INDEPENDENT_AI_IDE_VIEW_IDS = {
 	permissionQueue: 'independentAiIde.permissionQueue',
 	browserSession: 'independentAiIde.browserSession',
 	computerSession: 'independentAiIde.computerSession',
+	evolutionCandidates: 'independentAiIde.evolutionCandidates',
 } as const;

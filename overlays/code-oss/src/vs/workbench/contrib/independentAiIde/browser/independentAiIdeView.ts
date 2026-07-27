@@ -21,7 +21,7 @@ import {
 	IndependentAiIdeWorkbenchSnapshot,
 } from 'vs/workbench/contrib/independentAiIde/common/independentAiIdeWorkbenchBridge';
 
-export type IndependentAiIdeViewKind = 'agent' | 'tasks' | 'permissions' | 'browser' | 'computer';
+export type IndependentAiIdeViewKind = 'agent' | 'tasks' | 'permissions' | 'browser' | 'computer' | 'evolution';
 
 export class IndependentAiIdeView extends ViewPane {
 	private body: HTMLElement | undefined;
@@ -120,6 +120,12 @@ export class IndependentAiIdeView extends ViewPane {
 				break;
 			case 'browser':
 				this.renderBrowser(root, this.snapshot);
+				break;
+			case 'computer':
+				this.renderComputer(root, this.snapshot);
+				break;
+			case 'evolution':
+				this.renderEvolution(root, this.snapshot);
 				break;
 		}
 	}
@@ -340,6 +346,62 @@ export class IndependentAiIdeView extends ViewPane {
 		root.appendChild(createHeading('待权限审批动作'));
 		for (const action of snapshot.computerPreparedActions) {
 			root.appendChild(createCard(`${action.action} · ${action.applicationId}`, `${action.reason}\n过期：${action.expiresAt}`));
+		}
+	}
+
+	private renderEvolution(root: HTMLElement, snapshot: IndependentAiIdeWorkbenchSnapshot): void {
+		root.appendChild(createHeading('Capability Gaps'));
+		root.appendChild(this.createActionButton('刷新候选中心', () => this.requireBridge().refreshEvolution()));
+		for (const gap of snapshot.evolutionGaps) {
+			const card = createCard(gap.outcome, `出现次数：${gap.occurrenceCount}
+自动 Forge：${gap.autoForgeAllowed ? '允许' : '禁止'}`);
+			card.appendChild(createList(gap.requiredCapabilities));
+			root.appendChild(card);
+		}
+
+		root.appendChild(createHeading('Tool / Skill Candidates'));
+		for (const candidate of snapshot.evolutionCandidates) {
+			const details = [
+				`类型：${candidate.kind}`,
+				`版本：${candidate.version}`,
+				`风险：${candidate.riskLevel}`,
+				`状态：${candidate.status}`,
+				`完整验证：${candidate.validationComplete ? '是' : '否'}`,
+				`允许自动晋级：${candidate.autoPromotionAllowed ? '是' : '否'}`,
+				candidate.signerKeyId === undefined ? '' : `签名 Key：${candidate.signerKeyId}`,
+			].filter(Boolean).join('\n');
+			const card = createCard(candidate.name, `${candidate.description}
+${details}`);
+			card.appendChild(createList(candidate.capabilities));
+			if (candidate.status === 'draft' || candidate.status === 'validationFailed' || candidate.status === 'disabled' || candidate.status === 'rolledBack') {
+				card.appendChild(this.createActionButton('运行完整验证', () => this.requireBridge().validateEvolutionCandidate(candidate.id)));
+			}
+			if (candidate.status === 'awaitingManualApproval' && candidate.manualDecision === undefined) {
+				const approver = document.createElement('input');
+				approver.placeholder = '审批人 ID';
+				const reason = document.createElement('input');
+				reason.placeholder = '审批原因';
+				card.appendChild(approver);
+				card.appendChild(reason);
+				card.appendChild(this.createActionButton('人工批准', () => this.requireBridge().approveEvolutionCandidate(candidate.id, approver.value.trim(), 'approved', reason.value.trim())));
+				card.appendChild(this.createActionButton('人工拒绝', () => this.requireBridge().approveEvolutionCandidate(candidate.id, approver.value.trim(), 'rejected', reason.value.trim())));
+			}
+			if (candidate.status === 'awaitingManualApproval' && candidate.manualDecision === 'approved') {
+				card.appendChild(this.createActionButton('加入签名白名单', () => this.requireBridge().promoteEvolutionCandidate(candidate.id)));
+			}
+			if (candidate.status === 'promoted') {
+				card.appendChild(this.createActionButton('停用', () => this.requireBridge().disableEvolutionCandidate(candidate.id, 'Workbench 人工停用')));
+				card.appendChild(this.createActionButton('回滚', () => this.requireBridge().rollbackEvolutionCandidate(candidate.id, 'Workbench 人工回滚')));
+			}
+			root.appendChild(card);
+		}
+
+		root.appendChild(createHeading('Signed Whitelist'));
+		for (const entry of snapshot.evolutionWhitelist) {
+			root.appendChild(createCard(entry.name, `${entry.version}
+状态：${entry.status}
+晋级：${entry.promotionMode}
+签名：${entry.signerKeyId}`));
 		}
 	}
 

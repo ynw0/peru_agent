@@ -409,13 +409,24 @@ Windows Native Brokers
 
 置信度：低风险 Tool 91~95，高权限 Tool/Skill 不自动晋级
 
-- Capability Gap Detector；
-- Tool Forge；
-- Skill Forge；
-- Validator；
-- Candidate Registry；
-- Signed Whitelist；
-- 停用与回滚机制。
+- [x] Capability Gap Detector 与敏感证据清理；
+- [x] Tool Forge，只生成未注册候选包；
+- [x] Skill Forge，不扩大引用 Tool 权限；
+- [x] 保守静态分析和依赖审计；
+- [x] 隔离 Evaluator 结构化证明契约；
+- [x] 单元、属性、Fuzz、对抗、动态和可复现包门禁；
+- [x] 两个独立 Reviewer；
+- [x] Candidate Registry、原子持久化和状态机；
+- [x] Ed25519 Candidate Artifact、Whitelist Decision 签名和可独立验签 Signed Whitelist；
+- [x] 纯计算/严格只读自动晋级；
+- [x] 高权限 Tool/Skill 强制人工审批；
+- [x] 晋级前 Candidate、Validation、Artifact Digest 三方重验；
+- [x] Candidate/Whitelist 原子提交、停用、回滚和审计；
+- [x] Typed IPC Version 7 和 Code OSS Candidate Center；
+- [ ] 真实隔离 Sandbox Evaluator；
+- [ ] 生产 Tool SDK 和受控 Signed Candidate Loader；
+- [ ] 真实 Forge Model、独立 Reviewer 模型和 Gap 生产接线；
+- [ ] 生产密钥托管、轮换和吊销。
 
 ### Phase 12：发布和本地化
 
@@ -509,5 +520,5 @@ Windows Native Brokers
 - [x] Phase 9：Egress Broker、WebSearch/WebFetch、受控下载和 Browser Runtime 核心；
 - [x] Phase 10：认证应用 Computer Use Runtime、权限 Tool、Typed IPC、Workbench View 和 Windows Broker 原型；
 - [ ] 全局门禁：在 Windows 11 x64 编译并红队验证 Windows UI Automation Broker；
-- [ ] Phase 11：Tool/Skill 自进化；
+- [x] Phase 11：Tool/Skill 候选生成、验证、签名白名单、人工审批和回滚；
 - [ ] Phase 12：发布、本地化与安全强化。

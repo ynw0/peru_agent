@@ -8,6 +8,12 @@ import type { EgressAuditEntry } from "../egress/types.js";
 import type { WebDownloadArtifact, WebFetchResult, WebSearchResult } from "../web/types.js";
 import { EMPTY_WORKBENCH_SNAPSHOT } from "./workbench-state.js";
 import type {
+  CapabilityGapProposal,
+  EvolutionAuditEntry,
+  EvolutionCandidateRecord,
+  SignedWhitelistEntry,
+} from "../evolution/types.js";
+import type {
   ComputerActionResult,
   ComputerScreenshot,
   ComputerUiSnapshot,
@@ -29,6 +35,10 @@ export interface WorkbenchControllerState {
   readonly computerSnapshot?: ComputerUiSnapshot;
   readonly computerPreparedActions: readonly PreparedComputerAction[];
   readonly computerLastAction?: ComputerActionResult;
+  readonly evolutionGaps: readonly CapabilityGapProposal[];
+  readonly evolutionCandidates: readonly EvolutionCandidateRecord[];
+  readonly evolutionWhitelist: readonly SignedWhitelistEntry[];
+  readonly evolutionAudit: readonly EvolutionAuditEntry[];
 }
 
 export interface WorkbenchControllerListener {
@@ -46,6 +56,10 @@ export class WorkbenchController {
     browserSessions: [],
     computerWindows: [],
     computerPreparedActions: [],
+    evolutionGaps: [],
+    evolutionCandidates: [],
+    evolutionWhitelist: [],
+    evolutionAudit: [],
   };
   private readonly listeners = new Set<WorkbenchControllerListener>();
   private readonly disposables: { dispose(): void }[] = [];
@@ -284,6 +298,51 @@ export class WorkbenchController {
   public async listComputerAudit(): Promise<readonly ComputerUseAuditEntry[]> {
     const result = await this.client.request("computer.audit.list", {}, { timeoutMs: this.timeoutMs });
     return result.entries;
+  }
+
+  public async refreshEvolution(): Promise<void> {
+    const [gaps, candidates, whitelist, audit] = await Promise.all([
+      this.client.request("evolution.gaps.list", {}, { timeoutMs: this.timeoutMs }),
+      this.client.request("evolution.candidates.list", {}, { timeoutMs: this.timeoutMs }),
+      this.client.request("evolution.whitelist.list", {}, { timeoutMs: this.timeoutMs }),
+      this.client.request("evolution.audit.list", {}, { timeoutMs: this.timeoutMs }),
+    ]);
+    this.update({
+      evolutionGaps: gaps.gaps,
+      evolutionCandidates: candidates.candidates,
+      evolutionWhitelist: whitelist.entries,
+      evolutionAudit: audit.entries,
+    });
+  }
+
+  public async validateEvolutionCandidate(candidateId: string): Promise<void> {
+    await this.client.request("evolution.candidate.validate", { candidateId }, { timeoutMs: this.timeoutMs });
+    await this.refreshEvolution();
+  }
+
+  public async approveEvolutionCandidate(
+    candidateId: string,
+    approverId: string,
+    decision: "approved" | "rejected",
+    reason: string,
+  ): Promise<void> {
+    await this.client.request("evolution.candidate.approve", { candidateId, approverId, decision, reason }, { timeoutMs: this.timeoutMs });
+    await this.refreshEvolution();
+  }
+
+  public async promoteEvolutionCandidate(candidateId: string): Promise<void> {
+    await this.client.request("evolution.candidate.promote", { candidateId }, { timeoutMs: this.timeoutMs });
+    await this.refreshEvolution();
+  }
+
+  public async disableEvolutionCandidate(candidateId: string, reason: string): Promise<void> {
+    await this.client.request("evolution.candidate.disable", { candidateId, reason }, { timeoutMs: this.timeoutMs });
+    await this.refreshEvolution();
+  }
+
+  public async rollbackEvolutionCandidate(candidateId: string, reason: string): Promise<void> {
+    await this.client.request("evolution.candidate.rollback", { candidateId, reason }, { timeoutMs: this.timeoutMs });
+    await this.refreshEvolution();
   }
 
   private update(changes: Partial<WorkbenchControllerState>): void {

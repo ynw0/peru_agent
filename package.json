@@ -1,14 +1,14 @@
 {
   "name": "independent-ai-ide-core",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "private": true,
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
     "build": "tsc",
-    "test": "npm run build && node --test dist/tests/policies.test.js dist/tests/phase1.test.js dist/tests/phase2.test.js dist/tests/phase3.test.js dist/tests/phase4.test.js dist/tests/phase5.test.js dist/tests/phase6.test.js dist/tests/phase7.test.js dist/tests/phase8.test.js dist/tests/phase9.test.js dist/tests/phase10.test.js",
-    "smoke": "npm run build && node dist/src/smoke.js && node dist/src/phase1-smoke.js && node dist/src/phase2-smoke.js && node dist/src/phase3-smoke.js && node dist/src/phase4-smoke.js && node dist/src/phase5-smoke.js && node dist/src/phase6-smoke.js && node dist/src/phase7-smoke.js && node dist/src/phase8-smoke.js && node dist/src/phase9-smoke.js && node dist/src/phase10-smoke.js",
-    "audit": "node tools/audit.mjs && node tools/code-oss/verify-overlay.mjs && npm run sandbox:verify-source && npm run network:verify-source && npm run computer:verify-source",
+    "test": "npm run build && node --test dist/tests/policies.test.js dist/tests/phase1.test.js dist/tests/phase2.test.js dist/tests/phase3.test.js dist/tests/phase4.test.js dist/tests/phase5.test.js dist/tests/phase6.test.js dist/tests/phase7.test.js dist/tests/phase8.test.js dist/tests/phase9.test.js dist/tests/phase10.test.js dist/tests/phase11.test.js",
+    "smoke": "npm run build && node dist/src/smoke.js && node dist/src/phase1-smoke.js && node dist/src/phase2-smoke.js && node dist/src/phase3-smoke.js && node dist/src/phase4-smoke.js && node dist/src/phase5-smoke.js && node dist/src/phase6-smoke.js && node dist/src/phase7-smoke.js && node dist/src/phase8-smoke.js && node dist/src/phase9-smoke.js && node dist/src/phase10-smoke.js && node dist/src/phase11-smoke.js",
+    "audit": "node tools/audit.mjs && node tools/code-oss/verify-overlay.mjs && npm run sandbox:verify-source && npm run network:verify-source && npm run computer:verify-source && npm run evolution:verify-source",
     "code-oss:import": "node tools/code-oss/import-archive.mjs",
     "code-oss:apply-overlay": "node tools/code-oss/verify-overlay.mjs && node tools/code-oss/apply-overlay.mjs",
     "code-oss:verify-applied": "npm run code-oss:check-overlay && node tools/code-oss/verify-workbench-contract.mjs && node tools/code-oss/verify-applied.mjs",
@@ -20,7 +20,8 @@
     "network:verify-source": "node tools/network/verify-source.mjs",
     "computer:verify-source": "node tools/computer-use/verify-source.mjs",
     "computer:build-windows": "pwsh -NoLogo -NoProfile -NonInteractive -File native/windows-ui-automation-broker/build.ps1",
-    "computer:test-windows": "pwsh -NoLogo -NoProfile -NonInteractive -File native/windows-ui-automation-broker/integration-test.ps1"
+    "computer:test-windows": "pwsh -NoLogo -NoProfile -NonInteractive -File native/windows-ui-automation-broker/integration-test.ps1",
+    "evolution:verify-source": "node tools/evolution/verify-source.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

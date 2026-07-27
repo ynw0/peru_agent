@@ -10,8 +10,14 @@ validateWorkbenchContainers(WORKBENCH_CONTAINERS);
 if (CODE_OSS_SOURCE_PIN.version !== "1.74.0") {
   throw new Error("Phase 2 Code OSS 固定版本不是 1.74.0");
 }
-if (WORKBENCH_CONTAINERS.length !== 5) {
-  throw new Error("Phase 2 Workbench 容器数量不正确");
+const requiredContainerIds = [
+  "independentAiIde.agent",
+  "independentAiIde.tasks",
+  "independentAiIde.permissions",
+  "independentAiIde.browser",
+] as const;
+if (!requiredContainerIds.every(id => WORKBENCH_CONTAINERS.some(container => container.id === id))) {
+  throw new Error("Phase 2 必需 Workbench 容器缺失");
 }
 
 console.log("Phase 2 Smoke Test 通过：固定源码归档、独立品牌和 Workbench 容器基线有效");

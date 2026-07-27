@@ -154,3 +154,29 @@
 - 同步动作准备方法禁止 fire-and-forget 异步事件；监听器错误必须可由调用栈观察或由显式调度器处理。
 - Windows UI Automation Broker 未在 Windows 11 x64 完成编译、真实应用兼容性和红队测试前，产品不得启用 Computer Use 交互。
 - 历史阶段的源码契约应验证协议最低版本和必需方法，禁止固定旧 `IPC_PROTOCOL_VERSION` 文本阻止后续合法升级。
+
+## Tool/Skill 自进化规则
+
+- Capability Gap 必须基于重复的结构化证据，单次失败不得自动触发 Forge；Evidence 写入前必须清理密钥、Token、密码和 Secret。
+- Forge 只能生成候选包，禁止获得 Tool Registry、PermissionEngine、签名私钥或候选执行能力。
+- Skill 只能组合已有 Tool Manifest，Capability 必须等于引用 Tool 能力并集，禁止权限扩张。
+- 候选只能依赖受限 Tool SDK 或无依赖；未知依赖、动态执行、直接网络、Node Runtime API 和安全核心引用必须失败。
+- 静态分析是前置门禁，不得冒充沙箱；动态测试必须由隔离 Evaluator 执行并返回绑定精确 Candidate Digest 的结构化证明。
+- 完整验证必须包含单元、属性、Fuzz、对抗、隔离动态、Capability 一致性、可复现包和两个独立 Reviewer。
+- 两个 Reviewer 必须使用不同身份并审核相同 Candidate Digest。
+- 只有纯计算 Tool、严格 `workspace.read` Tool 以及只包含这些 Tool 的 Skill 可以自动晋级。
+- 写文件、进程、网络、浏览器、Computer Use、凭据、安全核心等高权限 Tool/Skill 永远需要人工审批。
+- 人工审批必须记录审批人、决定和原因，禁止匿名或空理由批准。
+- 候选签名必须绑定 Candidate Digest、Validation Digest、Package Digest、Signer Key ID 和 Signed At。
+- 晋级时必须重新计算当前 Candidate Digest，并同时匹配 Validation 和 Signed Artifact；旧签名不得授权修改后的候选。
+- Signed Whitelist 必须包含独立验签所需全部字段，不能依赖 Candidate Registry 才能验证。
+- Candidate Artifact 签名和 Whitelist Decision 签名必须分离；白名单状态、Promotion Mode、Capability 和时间字段必须纳入决策签名。
+- Candidate 状态与 Signed Whitelist 必须单次原子提交，禁止先后写入造成 `promoted/active`、`disabled/active` 等状态分裂。
+- 晋级只表示进入签名白名单，禁止在主进程中 `eval`、动态导入或自动注册候选代码。
+- 签名私钥不得进入 Typed IPC、Workbench、Candidate Registry、日志或普通配置文件。
+- Candidate Center 只能通过 Typed IPC 请求状态转换，禁止直接访问文件、进程、网络、签名器或候选执行对象。
+- 停用和回滚必须同步 Signed Whitelist 并写入不可省略的审计原因。
+- 历史 IPC 契约必须验证最低支持版本和必需方法，禁止写死旧版本阻止合法升级。
+- 每个注册的 Workbench ViewKind 必须有渲染分支和契约测试；注册成功不得被视为界面可用。
+- 源码安全审计应匹配真实 import、实例化或调用行为，禁止仅因注释提及敏感类型产生误报。
+- 真实隔离 Evaluator、生产 Loader、密钥轮换和第三方审计完成前，不得宣称自进化候选可安全自动执行。

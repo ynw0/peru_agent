@@ -32,6 +32,7 @@ const tasksIcon = registerIcon('independent-ai-ide-tasks-icon', Codicon.checklis
 const permissionsIcon = registerIcon('independent-ai-ide-permissions-icon', Codicon.shield, localize('independentAiIde.permissionsIcon', 'AI permission view icon.'));
 const browserIcon = registerIcon('independent-ai-ide-browser-icon', Codicon.globe, localize('independentAiIde.browserIcon', 'AI browser view icon.'));
 const computerIcon = registerIcon('independent-ai-ide-computer-icon', Codicon.deviceDesktop, localize('independentAiIde.computerIcon', 'Certified Computer Use view icon.'));
+const evolutionIcon = registerIcon('independent-ai-ide-evolution-icon', Codicon.beaker, localize('independentAiIde.evolutionIcon', 'Tool and Skill candidate view icon.'));
 
 // 容器统一使用 ViewPaneContainer，具体状态和业务逻辑放在各 View 中。
 function registerContainer(
@@ -85,6 +86,13 @@ const computerContainer = registerContainer(
 	localize('independentAiIde.computerUse', 'Computer Use'),
 	computerIcon,
 	50,
+	ViewContainerLocation.Sidebar,
+);
+const evolutionContainer = registerContainer(
+	INDEPENDENT_AI_IDE_CONTAINER_IDS.evolution,
+	localize('independentAiIde.evolution', 'Evolution'),
+	evolutionIcon,
+	60,
 	ViewContainerLocation.Sidebar,
 );
 
@@ -158,4 +166,14 @@ registerInteractiveView(
 	computerIcon,
 	'workbench.view.independentAiIde.computerUse',
 	50,
+);
+
+registerInteractiveView(
+	evolutionContainer,
+	INDEPENDENT_AI_IDE_VIEW_IDS.evolutionCandidates,
+	localize('independentAiIde.evolutionCandidates', 'Candidate Center'),
+	'evolution',
+	evolutionIcon,
+	'workbench.view.independentAiIde.evolution',
+	60,
 );

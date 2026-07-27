@@ -143,6 +143,39 @@ export interface IndependentAiIdeComputerActionView {
 	readonly expiresAt: string;
 }
 
+
+export interface IndependentAiIdeEvolutionGapView {
+	readonly id: string;
+	readonly outcome: string;
+	readonly occurrenceCount: number;
+	readonly requiredCapabilities: readonly string[];
+	readonly autoForgeAllowed: boolean;
+}
+
+export interface IndependentAiIdeEvolutionCandidateView {
+	readonly id: string;
+	readonly kind: 'tool' | 'skill';
+	readonly name: string;
+	readonly version: string;
+	readonly description: string;
+	readonly riskLevel: string;
+	readonly capabilities: readonly string[];
+	readonly status: 'draft' | 'validating' | 'validationFailed' | 'awaitingManualApproval' | 'promoted' | 'disabled' | 'rolledBack';
+	readonly validationComplete: boolean;
+	readonly autoPromotionAllowed: boolean;
+	readonly signerKeyId?: string;
+	readonly manualDecision?: 'approved' | 'rejected';
+}
+
+export interface IndependentAiIdeEvolutionWhitelistView {
+	readonly candidateId: string;
+	readonly name: string;
+	readonly version: string;
+	readonly status: 'active' | 'disabled' | 'rolledBack';
+	readonly promotionMode: 'automatic' | 'manual';
+	readonly signerKeyId: string;
+}
+
 export interface IndependentAiIdeWorkbenchSnapshot {
 	readonly activeSessionId?: string;
 	readonly sessionStatus: IndependentAiIdeSessionStatus;
@@ -158,6 +191,9 @@ export interface IndependentAiIdeWorkbenchSnapshot {
 	readonly computerWindows: readonly IndependentAiIdeComputerWindowView[];
 	readonly computerSnapshot?: IndependentAiIdeComputerSnapshotView;
 	readonly computerPreparedActions: readonly IndependentAiIdeComputerActionView[];
+	readonly evolutionGaps: readonly IndependentAiIdeEvolutionGapView[];
+	readonly evolutionCandidates: readonly IndependentAiIdeEvolutionCandidateView[];
+	readonly evolutionWhitelist: readonly IndependentAiIdeEvolutionWhitelistView[];
 	readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
 	readonly failed?: { readonly code: string; readonly message: string };
 }
@@ -183,6 +219,12 @@ export interface IndependentAiIdeWorkbenchBridge {
 	refreshComputerWindows(): Promise<void>;
 	inspectComputerWindow(windowHandle: string): Promise<void>;
 	screenshotComputerWindow(snapshotId: string): Promise<void>;
+	refreshEvolution(): Promise<void>;
+	validateEvolutionCandidate(candidateId: string): Promise<void>;
+	approveEvolutionCandidate(candidateId: string, approverId: string, decision: 'approved' | 'rejected', reason: string): Promise<void>;
+	promoteEvolutionCandidate(candidateId: string): Promise<void>;
+	disableEvolutionCandidate(candidateId: string, reason: string): Promise<void>;
+	rollbackEvolutionCandidate(candidateId: string, reason: string): Promise<void>;
 }
 
 let installedBridge: IndependentAiIdeWorkbenchBridge | undefined;

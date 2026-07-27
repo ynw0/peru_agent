@@ -72,6 +72,16 @@ const REQUEST_METHODS: ReadonlySet<string> = new Set<IpcRequestMethod>([
   "computer.inspect",
   "computer.screenshot",
   "computer.audit.list",
+  "evolution.gaps.list",
+  "evolution.candidates.list",
+  "evolution.candidate.get",
+  "evolution.candidate.validate",
+  "evolution.candidate.approve",
+  "evolution.candidate.promote",
+  "evolution.candidate.disable",
+  "evolution.candidate.rollback",
+  "evolution.whitelist.list",
+  "evolution.audit.list",
 ]);
 
 const EVENT_METHODS: ReadonlySet<string> = new Set<IpcEventMethod>([
@@ -248,6 +258,28 @@ export function isRequestParams(method: IpcRequestMethod, value: unknown): boole
       return hasOnlyKeys(value, ["windowHandle"]) && isNonEmptyString(value.windowHandle);
     case "computer.screenshot":
       return hasOnlyKeys(value, ["snapshotId"]) && isNonEmptyString(value.snapshotId);
+    case "evolution.gaps.list":
+    case "evolution.candidates.list":
+    case "evolution.whitelist.list":
+    case "evolution.audit.list":
+      return hasOnlyKeys(value, []);
+    case "evolution.candidate.get":
+    case "evolution.candidate.validate":
+    case "evolution.candidate.promote":
+      return hasOnlyKeys(value, ["candidateId"]) && isNonEmptyString(value.candidateId);
+    case "evolution.candidate.approve":
+      return hasOnlyKeys(value, ["candidateId", "approverId", "decision", "reason"])
+        && isNonEmptyString(value.candidateId)
+        && isNonEmptyString(value.approverId)
+        && (value.decision === "approved" || value.decision === "rejected")
+        && isNonEmptyString(value.reason)
+        && String(value.reason).length <= 2_000;
+    case "evolution.candidate.disable":
+    case "evolution.candidate.rollback":
+      return hasOnlyKeys(value, ["candidateId", "reason"])
+        && isNonEmptyString(value.candidateId)
+        && isNonEmptyString(value.reason)
+        && String(value.reason).length <= 2_000;
   }
 }
 
@@ -347,6 +379,21 @@ export function isResponseResult(method: IpcRequestMethod, value: unknown): bool
       return validateBoolean(() => validateComputerScreenshot(value));
     case "computer.audit.list":
       return isRecord(value) && Array.isArray(value.entries) && value.entries.every(isComputerUseAuditEntry);
+    case "evolution.gaps.list":
+      return isRecord(value) && Array.isArray(value.gaps) && value.gaps.every(isCapabilityGapProposal);
+    case "evolution.candidates.list":
+      return isRecord(value) && Array.isArray(value.candidates) && value.candidates.every(isEvolutionCandidateRecord);
+    case "evolution.candidate.get":
+    case "evolution.candidate.validate":
+    case "evolution.candidate.approve":
+    case "evolution.candidate.promote":
+    case "evolution.candidate.disable":
+    case "evolution.candidate.rollback":
+      return isEvolutionCandidateRecord(value);
+    case "evolution.whitelist.list":
+      return isRecord(value) && Array.isArray(value.entries) && value.entries.every(isSignedWhitelistEntry);
+    case "evolution.audit.list":
+      return isRecord(value) && Array.isArray(value.entries) && value.entries.every(isEvolutionAuditEntry);
   }
 }
 
@@ -889,6 +936,94 @@ function isEventPayload(method: IpcEventMethod, value: unknown): boolean {
 }
 
 
+
+function isCapabilityGapProposal(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && isSha256(value.signature)
+    && isNonEmptyString(value.workspaceId)
+    && isNonEmptyString(value.outcome)
+    && isStringArray(value.requiredCapabilities)
+    && isStringArray(value.observationIds)
+    && isPositiveInteger(value.occurrenceCount)
+    && (value.suggestedKind === "tool" || value.suggestedKind === "skill")
+    && typeof value.autoForgeAllowed === "boolean"
+    && isNonEmptyString(value.createdAt)
+    && isNonEmptyString(value.updatedAt);
+}
+
+function isEvolutionCandidateRecord(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && (value.kind === "tool" || value.kind === "skill")
+    && isNonEmptyString(value.name)
+    && isNonEmptyString(value.version)
+    && isNonEmptyString(value.description)
+    && isToolRiskLevel(value.riskLevel)
+    && isStringArray(value.capabilities)
+    && isRecord(value.payload)
+    && isStringArray(value.sourceGapIds)
+    && ["draft", "validating", "validationFailed", "awaitingManualApproval", "promoted", "disabled", "rolledBack"].includes(String(value.status))
+    && isNonEmptyString(value.createdAt)
+    && isNonEmptyString(value.updatedAt)
+    && (value.validation === undefined || isCandidateValidationReport(value.validation))
+    && (value.artifact === undefined || isSignedCandidateArtifact(value.artifact));
+}
+
+function isCandidateValidationReport(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.candidateId)
+    && isSha256(value.candidateDigest)
+    && isRecord(value.staticAnalysis)
+    && Array.isArray(value.reviewers)
+    && Array.isArray(value.gates)
+    && typeof value.complete === "boolean"
+    && typeof value.autoPromotionAllowed === "boolean"
+    && isNonEmptyString(value.completedAt);
+}
+
+function isSignedCandidateArtifact(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.candidateId)
+    && isSha256(value.candidateDigest)
+    && isSha256(value.validationDigest)
+    && isSha256(value.packageDigest)
+    && isNonEmptyString(value.signerKeyId)
+    && value.algorithm === "ed25519"
+    && isNonEmptyString(value.signatureBase64)
+    && isNonEmptyString(value.signedAt);
+}
+
+function isSignedWhitelistEntry(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.candidateId)
+    && (value.kind === "tool" || value.kind === "skill")
+    && isNonEmptyString(value.name)
+    && isNonEmptyString(value.version)
+    && isToolRiskLevel(value.riskLevel)
+    && isStringArray(value.capabilities)
+    && isSha256(value.candidateDigest)
+    && isSha256(value.validationDigest)
+    && isSha256(value.packageDigest)
+    && isNonEmptyString(value.signerKeyId)
+    && isNonEmptyString(value.signatureBase64)
+    && isNonEmptyString(value.signedAt)
+    && isNonEmptyString(value.decisionSignatureBase64)
+    && (value.status === "active" || value.status === "disabled" || value.status === "rolledBack")
+    && (value.promotionMode === "automatic" || value.promotionMode === "manual")
+    && isNonEmptyString(value.activatedAt)
+    && isNonEmptyString(value.updatedAt);
+}
+
+function isEvolutionAuditEntry(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && (value.candidateId === undefined || isNonEmptyString(value.candidateId))
+    && isNonEmptyString(value.action)
+    && isNonEmptyString(value.actor)
+    && isNonEmptyString(value.summary)
+    && isNonEmptyString(value.createdAt);
+}
 
 function validateBoolean(validator: () => unknown): boolean {
   try {

@@ -4,7 +4,8 @@ export type WorkbenchContainerId =
   | "independentAiIde.tasks"
   | "independentAiIde.permissions"
   | "independentAiIde.browser"
-  | "independentAiIde.computerUse";
+  | "independentAiIde.computerUse"
+  | "independentAiIde.evolution";
 
 export interface LocalizedText {
   readonly "zh-CN": string;
@@ -54,6 +55,13 @@ export const WORKBENCH_CONTAINERS: readonly WorkbenchContainerDefinition[] = [
     iconId: "device-desktop",
     defaultLocation: "activityBar",
     order: 50,
+  },
+  {
+    id: "independentAiIde.evolution",
+    title: { "zh-CN": "候选中心", "en-US": "Evolution" },
+    iconId: "beaker",
+    defaultLocation: "activityBar",
+    order: 60,
   },
 ];
 

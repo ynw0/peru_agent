@@ -27,6 +27,12 @@ import type {
   CompletionProviderProbeResult,
 } from "../completion/types.js";
 import type {
+  CapabilityGapProposal,
+  EvolutionAuditEntry,
+  EvolutionCandidateRecord,
+  SignedWhitelistEntry,
+} from "../evolution/types.js";
+import type {
   ComputerActionResult,
   ComputerScreenshot,
   ComputerUiSnapshot,
@@ -36,7 +42,7 @@ import type {
 } from "../computer-use/types.js";
 
 // IPC 协议版本必须显式匹配；版本不一致时拒绝连接，不做隐式兼容。
-export const IPC_PROTOCOL_VERSION = 6 as const;
+export const IPC_PROTOCOL_VERSION = 7 as const;
 
 export interface RuntimeInitializeRequest {
   readonly protocolVersion: typeof IPC_PROTOCOL_VERSION;
@@ -205,6 +211,15 @@ export interface BrowserListIpcRequest { readonly workspaceId?: string }
 
 export interface ComputerInspectIpcRequest { readonly windowHandle: string }
 export interface ComputerSnapshotIpcRequest { readonly snapshotId: string }
+
+export interface EvolutionCandidateRequest { readonly candidateId: string }
+export interface EvolutionManualApprovalRequest extends EvolutionCandidateRequest {
+  readonly approverId: string;
+  readonly decision: "approved" | "rejected";
+  readonly reason: string;
+}
+export interface EvolutionReasonRequest extends EvolutionCandidateRequest { readonly reason: string }
+
 
 
 // 请求方法表同时定义参数和返回值，是 Typed IPC 的唯一事实来源。
@@ -408,6 +423,46 @@ export interface IpcRequestMap {
   readonly "computer.audit.list": {
     readonly params: Record<string, never>;
     readonly result: { readonly entries: readonly ComputerUseAuditEntry[] };
+  };
+  readonly "evolution.gaps.list": {
+    readonly params: Record<string, never>;
+    readonly result: { readonly gaps: readonly CapabilityGapProposal[] };
+  };
+  readonly "evolution.candidates.list": {
+    readonly params: Record<string, never>;
+    readonly result: { readonly candidates: readonly EvolutionCandidateRecord[] };
+  };
+  readonly "evolution.candidate.get": {
+    readonly params: EvolutionCandidateRequest;
+    readonly result: EvolutionCandidateRecord;
+  };
+  readonly "evolution.candidate.validate": {
+    readonly params: EvolutionCandidateRequest;
+    readonly result: EvolutionCandidateRecord;
+  };
+  readonly "evolution.candidate.approve": {
+    readonly params: EvolutionManualApprovalRequest;
+    readonly result: EvolutionCandidateRecord;
+  };
+  readonly "evolution.candidate.promote": {
+    readonly params: EvolutionCandidateRequest;
+    readonly result: EvolutionCandidateRecord;
+  };
+  readonly "evolution.candidate.disable": {
+    readonly params: EvolutionReasonRequest;
+    readonly result: EvolutionCandidateRecord;
+  };
+  readonly "evolution.candidate.rollback": {
+    readonly params: EvolutionReasonRequest;
+    readonly result: EvolutionCandidateRecord;
+  };
+  readonly "evolution.whitelist.list": {
+    readonly params: Record<string, never>;
+    readonly result: { readonly entries: readonly SignedWhitelistEntry[] };
+  };
+  readonly "evolution.audit.list": {
+    readonly params: Record<string, never>;
+    readonly result: { readonly entries: readonly EvolutionAuditEntry[] };
   };
 }
 
