@@ -1,0 +1,10 @@
+COMMAND: npm run release:build-windows
+HOST: Linux 683a6fc9d426 6.12.13 #1 SMP Wed Jul 22 00:33:13 UTC 2026 x86_64 GNU/Linux
+NODE: v22.16.0
+PWSH: bash: line 17: pwsh: command not found
+
+> independent-ai-ide-core@0.13.0 release:build-windows
+> pwsh -NoLogo -NoProfile -NonInteractive -File packaging/windows/build-release.ps1
+
+sh: 1: pwsh: not found
+EXIT_CODE=127

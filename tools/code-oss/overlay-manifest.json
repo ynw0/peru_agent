@@ -18,6 +18,11 @@
       "mode": "copy"
     },
     {
+      "source": "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/common/independentAiIdeLocalization.ts",
+      "target": "src/vs/workbench/contrib/independentAiIde/common/independentAiIdeLocalization.ts",
+      "mode": "copy"
+    },
+    {
       "source": "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/browser/independentAiIdeView.ts",
       "target": "src/vs/workbench/contrib/independentAiIde/browser/independentAiIdeView.ts",
       "mode": "copy"

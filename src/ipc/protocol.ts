@@ -33,6 +33,11 @@ import type {
   SignedWhitelistEntry,
 } from "../evolution/types.js";
 import type {
+  ReleaseAuditEntry,
+  ReleaseRuntimeSnapshot,
+  SignedReleaseManifest,
+} from "../release/types.js";
+import type {
   ComputerActionResult,
   ComputerScreenshot,
   ComputerUiSnapshot,
@@ -42,7 +47,7 @@ import type {
 } from "../computer-use/types.js";
 
 // IPC 协议版本必须显式匹配；版本不一致时拒绝连接，不做隐式兼容。
-export const IPC_PROTOCOL_VERSION = 7 as const;
+export const IPC_PROTOCOL_VERSION = 8 as const;
 
 export interface RuntimeInitializeRequest {
   readonly protocolVersion: typeof IPC_PROTOCOL_VERSION;
@@ -219,6 +224,9 @@ export interface EvolutionManualApprovalRequest extends EvolutionCandidateReques
   readonly reason: string;
 }
 export interface EvolutionReasonRequest extends EvolutionCandidateRequest { readonly reason: string }
+
+export interface ReleaseLocaleRequest { readonly locale: "zh-CN" | "en-US" }
+export interface ReleaseManifestVerifyRequest { readonly manifest: SignedReleaseManifest }
 
 
 
@@ -464,6 +472,22 @@ export interface IpcRequestMap {
     readonly params: Record<string, never>;
     readonly result: { readonly entries: readonly EvolutionAuditEntry[] };
   };
+  readonly "release.status": {
+    readonly params: Record<string, never>;
+    readonly result: ReleaseRuntimeSnapshot;
+  };
+  readonly "release.locale.set": {
+    readonly params: ReleaseLocaleRequest;
+    readonly result: ReleaseRuntimeSnapshot;
+  };
+  readonly "release.manifest.verify": {
+    readonly params: ReleaseManifestVerifyRequest;
+    readonly result: { readonly valid: true; readonly version: string };
+  };
+  readonly "release.audit.list": {
+    readonly params: Record<string, never>;
+    readonly result: { readonly entries: readonly ReleaseAuditEntry[] };
+  };
 }
 
 export interface IpcEventMap {
@@ -479,6 +503,7 @@ export interface IpcEventMap {
   readonly "computer.snapshot.changed": ComputerUiSnapshot;
   readonly "computer.action.prepared": PreparedComputerAction;
   readonly "computer.action.completed": ComputerActionResult;
+  readonly "release.status.changed": ReleaseRuntimeSnapshot;
 }
 
 export type IpcRequestMethod = keyof IpcRequestMap;

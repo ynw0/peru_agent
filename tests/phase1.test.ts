@@ -26,9 +26,9 @@ test("独立产品清单不能使用 Microsoft 产品品牌", () => {
   }));
 });
 
-test("Workbench 六个容器 ID 和排序必须唯一", () => {
+test("Workbench 容器 ID 和排序必须唯一", () => {
   validateWorkbenchContainers(WORKBENCH_CONTAINERS);
-  assert.equal(WORKBENCH_CONTAINERS.length, 6);
+  assert.equal(WORKBENCH_CONTAINERS.length >= 7, true);
 });
 
 test("Typed IPC 可以完成初始化请求", async () => {

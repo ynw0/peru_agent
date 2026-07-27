@@ -180,3 +180,20 @@
 - 每个注册的 Workbench ViewKind 必须有渲染分支和契约测试；注册成功不得被视为界面可用。
 - 源码安全审计应匹配真实 import、实例化或调用行为，禁止仅因注释提及敏感类型产生误报。
 - 真实隔离 Evaluator、生产 Loader、密钥轮换和第三方审计完成前，不得宣称自进化候选可安全自动执行。
+
+## 发布、本地化与更新规则
+
+- 发布 Manifest 必须使用 Ed25519，并绑定产品、版本、平台、架构、源 Commit、Code OSS 版本、SBOM 和每个 Payload 文件。
+- Windows PE 的 Authenticode 与 Release Manifest 是不同信任层，生产发布必须同时通过。
+- Release Manifest 中禁止绝对路径、反斜杠、空路径段、`.`、`..`、重复路径和保留元数据路径。
+- Bundle 根目录、Payload 与 SBOM 必须是普通文件/目录，并使用 `lstat + realpath` 验证真实路径仍位于受控根目录。
+- 普通更新必须严格高于当前版本；相同版本和降级必须拒绝，旧版本只能通过显式且可审计的 rollback 激活。
+- 更新必须先写入并验证新版本目录，最后原子切换状态指针，禁止原地覆盖当前版本。
+- 更新失败不得改变当前版本；签名、哈希或 Authenticode 失败时不得保留发布输出。
+- Workbench Release Center 只能访问状态、语言、Manifest 验证和审计，禁止接收安装路径、私钥或直接执行安装。
+- 签名私钥不得进入仓库、普通配置、IPC、日志、SBOM 或发布状态文件。
+- `zh-CN` 与 `en-US` Catalog 必须拥有相同 Key；未知 Locale、缺失或多余插值参数必须明确失败，禁止静默回退。
+- 历史 IPC 和 Workbench 契约测试必须验证最低版本与必需能力，禁止写死可增长的精确版本或容器数量。
+- Code OSS Overlay Stub 只能用于独立类型检查，最终 API 可用性必须在固定原始 Code OSS 1.74.0 源码上验证。
+- 生产发布必须通过源码审计、strict、测试、Smoke、Code OSS 完整编译、Windows Broker 红队、SBOM、恶意软件扫描和 Authenticode。
+- 生产门禁未全部通过时 Readiness 必须为 blocked，禁止生成或分发伪装成正式版的安装包。

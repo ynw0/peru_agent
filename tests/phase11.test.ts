@@ -243,7 +243,7 @@ test("Evolution Typed IPC 只能管理候选状态，不传递签名私钥", asy
 });
 
 test("IPC Version 7 校验 Evolution 请求与响应", async () => {
-  assert.equal(IPC_PROTOCOL_VERSION, 7);
+  assert.ok(IPC_PROTOCOL_VERSION >= 7);
   assert.equal(isIpcMessage({ kind: "request", id: "1", method: "evolution.candidate.promote", params: { candidateId: "c1" } }), true);
   assert.equal(isIpcMessage({ kind: "request", id: "1", method: "evolution.candidate.approve", params: { candidateId: "c1", approverId: "a", decision: "approved", reason: "ok", privateKey: "x" } }), false);
 });

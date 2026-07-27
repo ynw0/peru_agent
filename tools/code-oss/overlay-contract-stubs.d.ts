@@ -7,6 +7,7 @@ declare module 'vs/base/common/codicons' {
     static readonly shield: Codicon;
     static readonly globe: Codicon;
     static readonly deviceDesktop: Codicon;
+    static readonly cloudDownload: Codicon;
   }
 }
 

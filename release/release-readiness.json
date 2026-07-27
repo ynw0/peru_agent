@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "productId": "independent-ai-ide",
+  "productVersion": "0.13.0",
+  "generatedAt": "2026-07-27T20:00:00.000Z",
+  "ready": false,
+  "blockers": [
+    "code-oss-compile",
+    "windows-sandbox-red-team",
+    "computer-use-red-team",
+    "malware-scan",
+    "authenticode"
+  ],
+  "gates": [
+    {
+      "gate": "source-audit",
+      "passed": true,
+      "evidence": "npm run audit: 206 UTF-8 files and all security source contracts passed",
+      "completedAt": "2026-07-27T20:00:00.000Z"
+    },
+    {
+      "gate": "typescript",
+      "passed": true,
+      "evidence": "npm run check and npm run build passed with TypeScript strict",
+      "completedAt": "2026-07-27T20:00:00.000Z"
+    },
+    {
+      "gate": "unit-tests",
+      "passed": true,
+      "evidence": "npm test: 162 passed, 0 failed",
+      "completedAt": "2026-07-27T20:00:00.000Z"
+    },
+    {
+      "gate": "smoke-tests",
+      "passed": true,
+      "evidence": "npm run smoke: Phase 0 through Phase 12 passed",
+      "completedAt": "2026-07-27T20:00:00.000Z"
+    },
+    {
+      "gate": "code-oss-compile",
+      "passed": false,
+      "evidence": "PHASE12_CODE_OSS_BUILD_LOG.txt: Node 22, Yarn unavailable, node_modules/gulp missing",
+      "completedAt": "2026-07-27T20:00:00.000Z"
+    },
+    {
+      "gate": "windows-sandbox-red-team",
+      "passed": false,
+      "evidence": "Windows 11 x64 AppContainer/Restricted Token/Job Object red-team not executed",
+      "completedAt": "2026-07-27T20:00:00.000Z"
+    },
+    {
+      "gate": "computer-use-red-team",
+      "passed": false,
+      "evidence": "Windows 11 UI Automation and certified application red-team not executed",
+      "completedAt": "2026-07-27T20:00:00.000Z"
+    },
+    {
+      "gate": "sbom",
+      "passed": true,
+      "evidence": "release/sbom.spdx.json generated deterministically as SPDX 2.3",
+      "completedAt": "2026-07-27T20:00:00.000Z"
+    },
+    {
+      "gate": "malware-scan",
+      "passed": false,
+      "evidence": "No compiled Windows release artifacts exist; malware scan not executed",
+      "completedAt": "2026-07-27T20:00:00.000Z"
+    },
+    {
+      "gate": "authenticode",
+      "passed": false,
+      "evidence": "PHASE12_WINDOWS_RELEASE_LOG.txt: Windows/pwsh/signing certificate unavailable",
+      "completedAt": "2026-07-27T20:00:00.000Z"
+    }
+  ]
+}

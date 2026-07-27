@@ -63,6 +63,7 @@ declare module "node:fs/promises" {
   export function mkdir(path: string, options: { recursive: true }): Promise<string | undefined>;
   export function mkdtemp(prefix: string): Promise<string>;
   export function readFile(path: string, encoding: "utf8"): Promise<string>;
+  export function readFile(path: string): Promise<Buffer>;
   export function readdir(path: string): Promise<string[]>;
   export function readdir(path: string, options: { withFileTypes: true }): Promise<Dirent[]>;
   export function realpath(path: string): Promise<string>;
@@ -70,6 +71,7 @@ declare module "node:fs/promises" {
   export function symlink(target: string, path: string, type?: "file" | "dir" | "junction"): Promise<void>;
   export function rm(path: string, options: { force: boolean; recursive?: boolean }): Promise<void>;
   export function writeFile(path: string, data: string, encoding: "utf8"): Promise<void>;
+  export function writeFile(path: string, data: string, options: { flag: "wx"; mode: number }): Promise<void>;
   export function writeFile(path: string, data: Uint8Array, options: { flag: "wx"; mode: number }): Promise<void>;
 }
 

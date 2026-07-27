@@ -1,0 +1,27 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "independent-ai-ide-core-0.13.0",
+  "documentNamespace": "https://independent-ai-ide.invalid/sbom/2f5c5f9fe0da692d1b48516c525aa3b137572e0eb59dc79a2d08c0c37a30baca",
+  "creationInfo": {
+    "created": "2026-07-27T20:00:00.000Z",
+    "creators": [
+      "Tool: Independent AI IDE Release Pipeline"
+    ]
+  },
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package--types-node-DEV_DEPENDENCY_OF",
+      "name": "@types/node",
+      "versionInfo": "^22.15.0",
+      "relationship": "DEV_DEPENDENCY_OF"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-typescript-DEV_DEPENDENCY_OF",
+      "name": "typescript",
+      "versionInfo": "^5.8.3",
+      "relationship": "DEV_DEPENDENCY_OF"
+    }
+  ]
+}

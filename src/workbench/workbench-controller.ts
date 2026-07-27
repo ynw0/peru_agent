@@ -13,6 +13,8 @@ import type {
   EvolutionCandidateRecord,
   SignedWhitelistEntry,
 } from "../evolution/types.js";
+import type { ReleaseRuntimeSnapshot } from "../release/types.js";
+import type { SupportedLocale } from "../localization/types.js";
 import type {
   ComputerActionResult,
   ComputerScreenshot,
@@ -39,6 +41,7 @@ export interface WorkbenchControllerState {
   readonly evolutionCandidates: readonly EvolutionCandidateRecord[];
   readonly evolutionWhitelist: readonly SignedWhitelistEntry[];
   readonly evolutionAudit: readonly EvolutionAuditEntry[];
+  readonly release: ReleaseRuntimeSnapshot;
 }
 
 export interface WorkbenchControllerListener {
@@ -60,6 +63,10 @@ export class WorkbenchController {
     evolutionCandidates: [],
     evolutionWhitelist: [],
     evolutionAudit: [],
+    release: {
+      productVersion: "0.12.0", channel: "stable", locale: "zh-CN",
+      installedVersions: [], productionReady: false, blockers: [],
+    },
   };
   private readonly listeners = new Set<WorkbenchControllerListener>();
   private readonly disposables: { dispose(): void }[] = [];
@@ -115,6 +122,9 @@ export class WorkbenchController {
           action,
         ];
         this.update({ computerPreparedActions });
+      }),
+      this.client.onEvent("release.status.changed", release => {
+        this.update({ release });
       }),
       this.client.onEvent("computer.action.completed", result => {
         this.update({
@@ -343,6 +353,18 @@ export class WorkbenchController {
   public async rollbackEvolutionCandidate(candidateId: string, reason: string): Promise<void> {
     await this.client.request("evolution.candidate.rollback", { candidateId, reason }, { timeoutMs: this.timeoutMs });
     await this.refreshEvolution();
+  }
+
+  public async refreshRelease(): Promise<ReleaseRuntimeSnapshot> {
+    const release = await this.client.request("release.status", {}, { timeoutMs: this.timeoutMs });
+    this.update({ release });
+    return release;
+  }
+
+  public async setLocale(locale: SupportedLocale): Promise<ReleaseRuntimeSnapshot> {
+    const release = await this.client.request("release.locale.set", { locale }, { timeoutMs: this.timeoutMs });
+    this.update({ release });
+    return release;
   }
 
   private update(changes: Partial<WorkbenchControllerState>): void {

@@ -44,6 +44,9 @@ for (const id of [
   "independentAiIde.tasks",
   "independentAiIde.permissions",
   "independentAiIde.browser",
+  "independentAiIde.computerUse",
+  "independentAiIde.evolution",
+  "independentAiIde.release",
 ]) {
   if (!identifiers.includes(`'${id}'`)) {
     throw new Error(`Workbench contribution 缺少容器定义：${id}`);

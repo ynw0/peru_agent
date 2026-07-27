@@ -20,8 +20,9 @@ import {
 	IndependentAiIdeWorkbenchBridge,
 	IndependentAiIdeWorkbenchSnapshot,
 } from 'vs/workbench/contrib/independentAiIde/common/independentAiIdeWorkbenchBridge';
+import { independentAiIdeLocalize, IndependentAiIdeMessageKey } from 'vs/workbench/contrib/independentAiIde/common/independentAiIdeLocalization';
 
-export type IndependentAiIdeViewKind = 'agent' | 'tasks' | 'permissions' | 'browser' | 'computer' | 'evolution';
+export type IndependentAiIdeViewKind = 'agent' | 'tasks' | 'permissions' | 'browser' | 'computer' | 'evolution' | 'release';
 
 export class IndependentAiIdeView extends ViewPane {
 	private body: HTMLElement | undefined;
@@ -101,7 +102,7 @@ export class IndependentAiIdeView extends ViewPane {
 		this.body.appendChild(root);
 
 		if (this.bridge === undefined || this.snapshot === undefined) {
-			root.appendChild(createNotice('Agent Runtime 未连接。不会执行任何本地操作。'));
+			root.appendChild(createNotice(this.t('runtimeDisconnected')));
 			return;
 		}
 		if (this.errorMessage !== undefined) {
@@ -127,12 +128,15 @@ export class IndependentAiIdeView extends ViewPane {
 			case 'evolution':
 				this.renderEvolution(root, this.snapshot);
 				break;
+			case 'release':
+				this.renderRelease(root, this.snapshot);
+				break;
 		}
 	}
 
 	private renderAgent(root: HTMLElement, snapshot: IndependentAiIdeWorkbenchSnapshot): void {
 		const status = createElement('div', 'independent-ai-ide-status');
-		status.textContent = `状态：${snapshot.sessionStatus}　Token：${snapshot.usage.inputTokens + snapshot.usage.outputTokens}`;
+		status.textContent = `${this.t('status', { status: snapshot.sessionStatus })}　${this.t('tokens', { tokens: snapshot.usage.inputTokens + snapshot.usage.outputTokens })}`;
 		root.appendChild(status);
 
 		const transcript = createElement('div', 'independent-ai-ide-transcript');
@@ -144,7 +148,7 @@ export class IndependentAiIdeView extends ViewPane {
 			card.style.padding = '8px';
 			card.style.border = '1px solid var(--vscode-panel-border)';
 			const label = createElement('strong');
-			label.textContent = message.role === 'user' ? '用户' : message.state === 'streaming' ? 'AI（生成中）' : 'AI';
+			label.textContent = message.role === 'user' ? this.t('user') : message.state === 'streaming' ? this.t('aiStreaming') : this.t('ai');
 			card.appendChild(label);
 			const content = createElement('pre');
 			content.textContent = message.content;
@@ -157,12 +161,12 @@ export class IndependentAiIdeView extends ViewPane {
 
 		const input = document.createElement('textarea');
 		input.rows = 4;
-		input.placeholder = '输入任务或继续说明…';
+		input.placeholder = this.t('chatPlaceholder');
 		root.appendChild(input);
 		const actions = createElement('div');
 		actions.style.display = 'flex';
 		actions.style.gap = '6px';
-		actions.appendChild(this.createActionButton('发送', async () => {
+		actions.appendChild(this.createActionButton(this.t('send'), async () => {
 			const value = input.value.trim();
 			if (value === '') {
 				throw new Error('消息不能为空');
@@ -170,13 +174,13 @@ export class IndependentAiIdeView extends ViewPane {
 			await this.requireBridge().sendInput(value);
 			input.value = '';
 		}));
-		actions.appendChild(this.createActionButton('停止', () => this.requireBridge().stop()));
-		actions.appendChild(this.createActionButton('重试', () => this.requireBridge().retry()));
+		actions.appendChild(this.createActionButton(this.t('stop'), () => this.requireBridge().stop()));
+		actions.appendChild(this.createActionButton(this.t('retry'), () => this.requireBridge().retry()));
 		root.appendChild(actions);
 	}
 
 	private renderTasks(root: HTMLElement, snapshot: IndependentAiIdeWorkbenchSnapshot): void {
-		root.appendChild(createHeading('计划审核'));
+		root.appendChild(createHeading(this.t('planReview')));
 		for (const plan of snapshot.plans) {
 			const card = createCard(`${plan.title}（置信度 ${plan.confidence}）`, plan.summary);
 			card.appendChild(createList(plan.affectedFiles));
@@ -187,7 +191,7 @@ export class IndependentAiIdeView extends ViewPane {
 			root.appendChild(card);
 		}
 
-		root.appendChild(createHeading('子 Agent'));
+		root.appendChild(createHeading(this.t('subagents')));
 		for (const task of snapshot.subagents) {
 			const details = [
 				`角色：${task.role}`,
@@ -200,7 +204,7 @@ export class IndependentAiIdeView extends ViewPane {
 			root.appendChild(createCard(task.taskId, details));
 		}
 
-		root.appendChild(createHeading('Tool 调用'));
+		root.appendChild(createHeading(this.t('toolCalls')));
 		for (const tool of snapshot.tools) {
 			const details = `${tool.description}\n风险：${tool.riskLevel}\n状态：${tool.state}`;
 			const card = createCard(tool.toolName, details);
@@ -209,7 +213,7 @@ export class IndependentAiIdeView extends ViewPane {
 			root.appendChild(card);
 		}
 
-		root.appendChild(createHeading('Diff Review'));
+		root.appendChild(createHeading(this.t('diffReview')));
 		for (const proposal of snapshot.diffProposals) {
 			const card = createCard(`Diff ${proposal.proposalId}`, `状态：${proposal.status}`);
 			card.appendChild(createList(proposal.affectedFiles));
@@ -220,7 +224,7 @@ export class IndependentAiIdeView extends ViewPane {
 			root.appendChild(card);
 		}
 
-		root.appendChild(createHeading('Checkpoint'));
+		root.appendChild(createHeading(this.t('checkpoints')));
 		for (const checkpoint of snapshot.checkpoints) {
 			const card = createCard(checkpoint.checkpointId, checkpoint.restored ? '已恢复' : '可恢复');
 			if (!checkpoint.restored) {
@@ -232,7 +236,7 @@ export class IndependentAiIdeView extends ViewPane {
 
 
 	private renderBrowser(root: HTMLElement, snapshot: IndependentAiIdeWorkbenchSnapshot): void {
-		root.appendChild(createHeading('受控 Chromium'));
+		root.appendChild(createHeading(this.t('browserTitle')));
 		const workspaceInput = document.createElement('input');
 		workspaceInput.placeholder = 'Workspace ID';
 		workspaceInput.value = snapshot.activeSessionId === undefined ? 'workspace' : 'workspace';
@@ -245,7 +249,7 @@ export class IndependentAiIdeView extends ViewPane {
 			mode.appendChild(option);
 		}
 		root.appendChild(mode);
-		root.appendChild(this.createActionButton('创建受控浏览器', () => this.requireBridge().createBrowser(
+		root.appendChild(this.createActionButton(this.t('browserCreate'), () => this.requireBridge().createBrowser(
 			workspaceInput.value.trim(),
 			mode.value as 'offline' | 'lan' | 'internet',
 			'zh-CN',
@@ -305,8 +309,8 @@ export class IndependentAiIdeView extends ViewPane {
 
 
 	private renderComputer(root: HTMLElement, snapshot: IndependentAiIdeWorkbenchSnapshot): void {
-		root.appendChild(createHeading('认证应用 Computer Use'));
-		root.appendChild(createNotice('未认证应用只能检查。点击、输入和快捷键必须由 Agent Tool 经权限中心批准。'));
+		root.appendChild(createHeading(this.t('computerTitle')));
+		root.appendChild(createNotice(this.t('computerNotice')));
 		root.appendChild(this.createActionButton('刷新窗口', () => this.requireBridge().refreshComputerWindows()));
 
 		for (const window of snapshot.computerWindows) {
@@ -351,7 +355,7 @@ export class IndependentAiIdeView extends ViewPane {
 
 	private renderEvolution(root: HTMLElement, snapshot: IndependentAiIdeWorkbenchSnapshot): void {
 		root.appendChild(createHeading('Capability Gaps'));
-		root.appendChild(this.createActionButton('刷新候选中心', () => this.requireBridge().refreshEvolution()));
+		root.appendChild(this.createActionButton(this.t('evolutionRefresh'), () => this.requireBridge().refreshEvolution()));
 		for (const gap of snapshot.evolutionGaps) {
 			const card = createCard(gap.outcome, `出现次数：${gap.occurrenceCount}
 自动 Forge：${gap.autoForgeAllowed ? '允许' : '禁止'}`);
@@ -405,19 +409,51 @@ ${details}`);
 		}
 	}
 
+	private renderRelease(root: HTMLElement, snapshot: IndependentAiIdeWorkbenchSnapshot): void {
+		const release = snapshot.release;
+		root.appendChild(createHeading(this.t('releaseTitle')));
+		root.appendChild(createNotice(this.t('version', { version: release.currentVersion ?? release.productVersion })));
+		root.appendChild(createNotice(this.t('channel', { channel: release.channel })));
+		root.appendChild(createNotice(this.t('productionReady', { ready: this.t(release.productionReady ? 'yes' : 'no') })));
+		root.appendChild(this.createActionButton(this.t('refresh'), () => this.requireBridge().refreshRelease()));
+
+		const localeLabel = createElement('label');
+		localeLabel.textContent = this.t('locale');
+		const locale = document.createElement('select');
+		for (const value of ['zh-CN', 'en-US'] as const) {
+			const option = document.createElement('option');
+			option.value = value;
+			option.textContent = value === 'zh-CN' ? '简体中文' : 'English';
+			option.selected = release.locale === value;
+			locale.appendChild(option);
+		}
+		locale.addEventListener('change', () => { void this.requireBridge().setLocale(locale.value as 'zh-CN' | 'en-US'); });
+		localeLabel.appendChild(locale);
+		root.appendChild(localeLabel);
+
+		if (release.blockers.length > 0) {
+			root.appendChild(createHeading(this.t('blockers')));
+			root.appendChild(createList(release.blockers));
+		}
+	}
+
 	private renderPermissions(root: HTMLElement, snapshot: IndependentAiIdeWorkbenchSnapshot): void {
 		if (snapshot.pendingPermissions.length === 0) {
-			root.appendChild(createNotice('当前没有待处理权限请求。'));
+			root.appendChild(createNotice(this.t('permissionsEmpty')));
 			return;
 		}
 		for (const permission of snapshot.pendingPermissions) {
 			const card = createCard(permission.toolName, `风险：${permission.riskLevel}\n原因：${permission.reason}`);
 			card.appendChild(createList(permission.capabilities));
 			card.appendChild(createList(permission.affectedFiles));
-			card.appendChild(this.createActionButton('允许一次', () => this.requireBridge().resolvePermission(permission.requestId, 'allow')));
-			card.appendChild(this.createActionButton('拒绝', () => this.requireBridge().resolvePermission(permission.requestId, 'deny')));
+			card.appendChild(this.createActionButton(this.t('allowOnce'), () => this.requireBridge().resolvePermission(permission.requestId, 'allow')));
+			card.appendChild(this.createActionButton(this.t('deny'), () => this.requireBridge().resolvePermission(permission.requestId, 'deny')));
 			root.appendChild(card);
 		}
+	}
+
+	private t(key: IndependentAiIdeMessageKey, parameters: Readonly<Record<string, string | number>> = {}): string {
+		return independentAiIdeLocalize(this.snapshot?.release.locale ?? 'zh-CN', key, parameters);
 	}
 
 	private createActionButton(label: string, action: () => Promise<void>): HTMLButtonElement {
@@ -428,7 +464,7 @@ ${details}`);
 			button.disabled = true;
 			this.errorMessage = undefined;
 			void action().catch((error: unknown) => {
-				this.errorMessage = error instanceof Error ? error.message : '未知操作错误';
+				this.errorMessage = error instanceof Error ? error.message : this.t('unknownError');
 			}).finally(() => {
 				button.disabled = false;
 				this.render();
@@ -439,7 +475,7 @@ ${details}`);
 
 	private requireBridge(): IndependentAiIdeWorkbenchBridge {
 		if (this.bridge === undefined) {
-			throw new Error('Agent Runtime 未连接');
+			throw new Error(this.t('runtimeDisconnected'));
 		}
 		return this.bridge;
 	}

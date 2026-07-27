@@ -15,7 +15,8 @@
 - Phase 8：子 Agent 调度、预算、快照隔离、父子取消、Reviewer/Tester 门禁和 Patch 合并；
 - Phase 9：统一 Egress、WebSearch、WebFetch、受控下载和 Browser Runtime 核心。
 - Phase 10：认证应用 Computer Use、UI Tree、动作证据、权限 Tool、Typed IPC、Workbench View 和 Windows UI Automation Broker 原型；
-- Phase 11：Capability Gap、Tool/Skill Forge、验证流水线、Ed25519 签名白名单、人工审批、停用和回滚。
+- Phase 11：Capability Gap、Tool/Skill Forge、验证流水线、Ed25519 签名白名单、人工审批、停用和回滚；
+- Phase 12：中英文本地化、Ed25519 发布清单、SPDX SBOM、原子更新、Release Center 和 Windows 发布门禁。
 
 Agent Core 已支持：
 
@@ -53,7 +54,11 @@ Agent Core 已支持：
 - 静态分析、隔离证明、双 Reviewer 和完整 Validation Gate；
 - Ed25519 Candidate Artifact、Whitelist Decision 签名、可独立验签 Signed Whitelist；
 - 低风险自动晋级、高权限人工审批、停用和回滚；
-- Code OSS Candidate Center 和 Evolution Typed IPC。
+- Code OSS Candidate Center 和 Evolution Typed IPC；
+- `zh-CN` / `en-US` 严格本地化资源；
+- Ed25519 Release Manifest、SPDX 2.3 SBOM 和文件级 SHA-256；
+- A/B 版本目录、普通更新禁止降级、显式回滚；
+- Code OSS Release Center 与 Windows Authenticode 构建/安装门禁。
 
 ## 尚未完成
 
@@ -66,7 +71,9 @@ Agent Core 已支持：
 - 第一批认证应用清单签署；
 - 真实 LM Studio/vLLM FIM 端点及补全性能门禁；
 - 对真实 LM Studio、vLLM 或云端模型服务的联网集成测试；
-- 真实 Candidate Sandbox Evaluator、Tool SDK、Signed Candidate Loader 和生产密钥托管。
+- 真实 Candidate Sandbox Evaluator、Tool SDK、Signed Candidate Loader 和生产密钥托管；
+- Node.js 16.14.x、Yarn 1.x 和 Code OSS 锁定依赖下的完整 Electron 编译；
+- Windows Authenticode 真签名、恶意软件扫描、安装/更新 E2E 和第三方安全审计。
 
 ## 核心项目门禁
 
@@ -100,6 +107,10 @@ npm run smoke
 - `PHASE10_CODE_OSS_BUILD_LOG.txt`：Phase 10 Code OSS 完整编译门禁日志；
 - `PHASE11_REPORT.md`：Tool/Skill 自进化候选系统执行报告；
 - `PHASE11_CODE_OSS_BUILD_LOG.txt`：Phase 11 Code OSS 完整编译门禁日志；
+- `PHASE12_REPORT.md`：发布、本地化和原子更新执行报告；
+- `PHASE12_CODE_OSS_BUILD_LOG.txt`：Phase 12 Code OSS 完整编译门禁日志；
+- `PHASE12_WINDOWS_RELEASE_LOG.txt`：Windows 发布构建门禁日志；
+- `docs/architecture/release-localization-and-update.md`：发布签名、本地化和原子更新架构；
 - `docs/architecture/agent-core.md`：Agent Core 架构；
 - `docs/architecture/workspace-diff-checkpoint.md`：安全文件修改链；
 - `docs/architecture/powershell-windows-sandbox.md`：PowerShell 与 Windows 原生沙箱架构；

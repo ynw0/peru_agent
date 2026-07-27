@@ -428,15 +428,23 @@ Windows Native Brokers
 - [ ] 真实 Forge Model、独立 Reviewer 模型和 Gap 生产接线；
 - [ ] 生产密钥托管、轮换和吊销。
 
-### Phase 12：发布和本地化
+### Phase 12：发布、本地化与安全强化
 
-置信度：92/100
+置信度：88/100
 
-- 中文、英文；
-- Windows 安装包；
-- 代码签名；
-- 原子更新；
-- E2E 和安全审计。
+- [x] `zh-CN` 与 `en-US` 严格资源 Catalog；
+- [x] Ed25519 Release Manifest、Trust Store 和文件级 SHA-256；
+- [x] SPDX 2.3 SBOM；
+- [x] A/B 版本目录、原子状态指针和显式回滚；
+- [x] 普通更新禁止同版本和降级；
+- [x] Bundle 根、Payload、SBOM 的符号链接和真实路径检查；
+- [x] Typed IPC Version 8 和 Code OSS Release Center；
+- [x] Windows 构建、安装和卸载 Authenticode 门禁脚本；
+- [x] Production Release Gate 与 Readiness Artifact；
+- [ ] Node.js 16.14.x + Yarn 1.x 安装 Code OSS 锁定依赖；
+- [ ] Electron Workbench 完整编译、桌面 E2E 和 Windows 安装包；
+- [ ] Windows Sandbox/Computer Use 红队；
+- [ ] 生产证书 Authenticode、恶意软件扫描和第三方安全审计。
 
 ## 13. 每次修改的强制流程
 
@@ -521,4 +529,5 @@ Windows Native Brokers
 - [x] Phase 10：认证应用 Computer Use Runtime、权限 Tool、Typed IPC、Workbench View 和 Windows Broker 原型；
 - [ ] 全局门禁：在 Windows 11 x64 编译并红队验证 Windows UI Automation Broker；
 - [x] Phase 11：Tool/Skill 候选生成、验证、签名白名单、人工审批和回滚；
-- [ ] Phase 12：发布、本地化与安全强化。
+- [x] Phase 12：发布、本地化、签名 Manifest、SBOM、原子更新、Release Center 和 Windows 发布门禁源码；
+- [ ] 发布收口：Code OSS 完整编译、Windows 真机红队、Authenticode、恶意软件扫描和安装 E2E。

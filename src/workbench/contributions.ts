@@ -5,7 +5,8 @@ export type WorkbenchContainerId =
   | "independentAiIde.permissions"
   | "independentAiIde.browser"
   | "independentAiIde.computerUse"
-  | "independentAiIde.evolution";
+  | "independentAiIde.evolution"
+  | "independentAiIde.release";
 
 export interface LocalizedText {
   readonly "zh-CN": string;
@@ -62,6 +63,13 @@ export const WORKBENCH_CONTAINERS: readonly WorkbenchContainerDefinition[] = [
     iconId: "beaker",
     defaultLocation: "activityBar",
     order: 60,
+  },
+  {
+    id: "independentAiIde.release",
+    title: { "zh-CN": "发布与更新", "en-US": "Release & Updates" },
+    iconId: "cloud-download",
+    defaultLocation: "activityBar",
+    order: 70,
   },
 ];
 

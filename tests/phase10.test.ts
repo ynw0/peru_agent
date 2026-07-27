@@ -319,5 +319,7 @@ test("IPC Version 6 和 Overlay 不暴露 Computer Use 直接交互按钮", asyn
   assert.equal(view.includes("clickComputer"), false);
   assert.equal(view.includes("typeComputer"), false);
   assert.equal(bridge.includes("executeComputer"), false);
-  assert.equal(view.includes("经权限中心批准"), true);
+  const localization = await readFile("overlays/code-oss/src/vs/workbench/contrib/independentAiIde/common/independentAiIdeLocalization.ts", "utf8");
+  assert.equal(view.includes("computerNotice"), true);
+  assert.equal(localization.includes("require Agent Tool permission approval"), true);
 });

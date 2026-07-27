@@ -10,6 +10,7 @@ export const INDEPENDENT_AI_IDE_CONTAINER_IDS = {
 	browser: 'independentAiIde.browser',
 	computerUse: 'independentAiIde.computerUse',
 	evolution: 'independentAiIde.evolution',
+	release: 'independentAiIde.release',
 } as const;
 
 export const INDEPENDENT_AI_IDE_VIEW_IDS = {
@@ -19,4 +20,5 @@ export const INDEPENDENT_AI_IDE_VIEW_IDS = {
 	browserSession: 'independentAiIde.browserSession',
 	computerSession: 'independentAiIde.computerSession',
 	evolutionCandidates: 'independentAiIde.evolutionCandidates',
+	releaseCenter: 'independentAiIde.releaseCenter',
 } as const;

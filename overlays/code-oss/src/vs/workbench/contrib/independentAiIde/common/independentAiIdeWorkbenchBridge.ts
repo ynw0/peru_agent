@@ -176,6 +176,18 @@ export interface IndependentAiIdeEvolutionWhitelistView {
 	readonly signerKeyId: string;
 }
 
+export interface IndependentAiIdeReleaseView {
+	readonly productVersion: string;
+	readonly channel: 'stable' | 'preview';
+	readonly locale: 'zh-CN' | 'en-US';
+	readonly currentVersion?: string;
+	readonly previousVersion?: string;
+	readonly installedVersions: readonly string[];
+	readonly productionReady: boolean;
+	readonly blockers: readonly string[];
+	readonly lastCheckedAt?: string;
+}
+
 export interface IndependentAiIdeWorkbenchSnapshot {
 	readonly activeSessionId?: string;
 	readonly sessionStatus: IndependentAiIdeSessionStatus;
@@ -194,6 +206,7 @@ export interface IndependentAiIdeWorkbenchSnapshot {
 	readonly evolutionGaps: readonly IndependentAiIdeEvolutionGapView[];
 	readonly evolutionCandidates: readonly IndependentAiIdeEvolutionCandidateView[];
 	readonly evolutionWhitelist: readonly IndependentAiIdeEvolutionWhitelistView[];
+	readonly release: IndependentAiIdeReleaseView;
 	readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
 	readonly failed?: { readonly code: string; readonly message: string };
 }
@@ -225,6 +238,8 @@ export interface IndependentAiIdeWorkbenchBridge {
 	promoteEvolutionCandidate(candidateId: string): Promise<void>;
 	disableEvolutionCandidate(candidateId: string, reason: string): Promise<void>;
 	rollbackEvolutionCandidate(candidateId: string, reason: string): Promise<void>;
+	refreshRelease(): Promise<void>;
+	setLocale(locale: 'zh-CN' | 'en-US'): Promise<void>;
 }
 
 let installedBridge: IndependentAiIdeWorkbenchBridge | undefined;

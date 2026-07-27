@@ -1,4 +1,5 @@
 import { IPC_PROTOCOL_VERSION } from "./protocol.js";
+import type { ReleaseAuditEntry, ReleaseRuntimeSnapshot, SignedReleaseManifest } from "../release/types.js";
 import {
   validateComputerActionResult,
   validateComputerScreenshot,
@@ -82,6 +83,10 @@ const REQUEST_METHODS: ReadonlySet<string> = new Set<IpcRequestMethod>([
   "evolution.candidate.rollback",
   "evolution.whitelist.list",
   "evolution.audit.list",
+  "release.status",
+  "release.locale.set",
+  "release.manifest.verify",
+  "release.audit.list",
 ]);
 
 const EVENT_METHODS: ReadonlySet<string> = new Set<IpcEventMethod>([
@@ -94,6 +99,7 @@ const EVENT_METHODS: ReadonlySet<string> = new Set<IpcEventMethod>([
   "computer.snapshot.changed",
   "computer.action.prepared",
   "computer.action.completed",
+  "release.status.changed",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -280,6 +286,13 @@ export function isRequestParams(method: IpcRequestMethod, value: unknown): boole
         && isNonEmptyString(value.candidateId)
         && isNonEmptyString(value.reason)
         && String(value.reason).length <= 2_000;
+    case "release.status":
+    case "release.audit.list":
+      return hasOnlyKeys(value, []);
+    case "release.locale.set":
+      return hasOnlyKeys(value, ["locale"]) && (value.locale === "zh-CN" || value.locale === "en-US");
+    case "release.manifest.verify":
+      return hasOnlyKeys(value, ["manifest"]) && isSignedReleaseManifest(value.manifest);
   }
 }
 
@@ -394,6 +407,13 @@ export function isResponseResult(method: IpcRequestMethod, value: unknown): bool
       return isRecord(value) && Array.isArray(value.entries) && value.entries.every(isSignedWhitelistEntry);
     case "evolution.audit.list":
       return isRecord(value) && Array.isArray(value.entries) && value.entries.every(isEvolutionAuditEntry);
+    case "release.status":
+    case "release.locale.set":
+      return isReleaseRuntimeSnapshot(value);
+    case "release.manifest.verify":
+      return isRecord(value) && value.valid === true && isNonEmptyString(value.version);
+    case "release.audit.list":
+      return isRecord(value) && Array.isArray(value.entries) && value.entries.every(isReleaseAuditEntry);
   }
 }
 
@@ -932,6 +952,8 @@ function isEventPayload(method: IpcEventMethod, value: unknown): boolean {
       return isPreparedComputerAction(value);
     case "computer.action.completed":
       return validateBoolean(() => validateComputerActionResult(value));
+    case "release.status.changed":
+      return isReleaseRuntimeSnapshot(value);
   }
 }
 
@@ -1279,4 +1301,44 @@ function isToolRiskLevel(value: unknown): boolean {
 
 function isSha256(value: unknown): boolean {
   return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
+
+function isSignedReleaseManifest(value: unknown): value is SignedReleaseManifest {
+  if (!isRecord(value)) return false;
+  return value.schemaVersion === 1
+    && value.productId === "independent-ai-ide"
+    && isNonEmptyString(value.version)
+    && (value.channel === "stable" || value.channel === "preview")
+    && (value.platform === "win32" || value.platform === "linux" || value.platform === "darwin")
+    && (value.architecture === "x64" || value.architecture === "arm64")
+    && isNonEmptyString(value.createdAt)
+    && typeof value.sourceCommit === "string" && /^[0-9a-f]{40}$/.test(value.sourceCommit)
+    && value.codeOssVersion === "1.74.0"
+    && typeof value.sbomSha256 === "string" && /^[0-9a-f]{64}$/.test(value.sbomSha256)
+    && Array.isArray(value.files) && value.files.length > 0 && value.files.every(file => isRecord(file)
+      && isNonEmptyString(file.path) && typeof file.sha256 === "string" && /^[0-9a-f]{64}$/.test(file.sha256)
+      && isNonNegativeInteger(file.size) && typeof file.executable === "boolean")
+    && typeof value.manifestDigest === "string" && /^[0-9a-f]{64}$/.test(value.manifestDigest)
+    && isNonEmptyString(value.signerKeyId) && value.algorithm === "ed25519" && isNonEmptyString(value.signatureBase64);
+}
+
+function isReleaseRuntimeSnapshot(value: unknown): value is ReleaseRuntimeSnapshot {
+  return isRecord(value)
+    && isNonEmptyString(value.productVersion)
+    && (value.channel === "stable" || value.channel === "preview")
+    && (value.locale === "zh-CN" || value.locale === "en-US")
+    && isOptionalNonEmptyString(value.currentVersion)
+    && isOptionalNonEmptyString(value.previousVersion)
+    && isStringArray(value.installedVersions)
+    && typeof value.productionReady === "boolean"
+    && isStringArray(value.blockers)
+    && (value.lastCheckedAt === undefined || isNonEmptyString(value.lastCheckedAt));
+}
+
+function isReleaseAuditEntry(value: unknown): value is ReleaseAuditEntry {
+  return isRecord(value) && isNonEmptyString(value.id)
+    && (value.action === "manifest-verified" || value.action === "version-staged" || value.action === "version-activated" || value.action === "rollback" || value.action === "locale-changed")
+    && isOptionalNonEmptyString(value.version)
+    && isNonEmptyString(value.actor) && isNonEmptyString(value.timestamp) && typeof value.details === "string";
 }
