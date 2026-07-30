@@ -64,6 +64,7 @@ function request(
         ? ["workspace.read"]
         : ["workspace.read"],
     budget: BUDGET,
+    reviewPolicy: "reviewerAndTester",
     ...overrides,
   };
 }
@@ -342,6 +343,8 @@ test("进程重启后 queued/running 子任务不会伪装为仍在运行", asyn
     status: "running",
     createdAt: now,
     updatedAt: now,
+    attemptId: "attempt-running",
+    rejectionCount: 0,
   };
   await store.save(record);
 
@@ -363,7 +366,7 @@ test("进程重启后 queued/running 子任务不会伪装为仍在运行", asyn
       { maxConcurrent: 1, maxConcurrentPerParent: 1 },
     );
     const restored = await scheduler.restoreAll();
-    assert.equal(restored[0]?.status, "failed");
+    assert.equal(restored[0]?.status, "interrupted");
     assert.equal(restored[0]?.error?.code, "SUBAGENT_INTERRUPTED_RECOVERED");
   } finally {
     await rm(root, { recursive: true, force: true });

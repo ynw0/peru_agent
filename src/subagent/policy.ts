@@ -1,7 +1,7 @@
 import type { Capability } from "../agent-protocol.js";
 import { normalizeWorkspacePath } from "../workspace/path-guard.js";
 import { MAX_SUBAGENT_DEPTH } from "./types.js";
-import type { SubagentRole, SubagentTaskRequest } from "./types.js";
+import type { SubagentRole, SubagentTaskRequest, SubagentReviewPolicy } from "./types.js";
 
 const ROLE_CAPABILITIES: Readonly<Record<SubagentRole, ReadonlySet<Capability>>> = {
   planner: new Set(["workspace.read"]),
@@ -12,10 +12,12 @@ const ROLE_CAPABILITIES: Readonly<Record<SubagentRole, ReadonlySet<Capability>>>
 };
 
 export function normalizeScope(path: string): string {
-  return normalizeWorkspacePath(path.replace(/\/$/, ""));
+  const trimmed = path.replace(/\/$/, "");
+  return trimmed === "." ? "." : normalizeWorkspacePath(trimmed);
 }
 
 export function pathInScope(path: string, scope: string): boolean {
+  if (scope === ".") return path !== "" && !path.startsWith("/") && !path.includes("../");
   return path === scope || path.startsWith(`${scope}/`);
 }
 
@@ -36,6 +38,7 @@ export function validateSubagentTaskRequest(request: SubagentTaskRequest): Subag
   if (request.allowedPaths.length === 0) {
     throw new Error("子 Agent 至少需要一个允许路径");
   }
+  validateReviewPolicy(request.reviewPolicy);
 
   const allowedPaths = uniqueNormalized(request.allowedPaths);
   const writablePaths = uniqueNormalized(request.writablePaths);
@@ -70,6 +73,12 @@ export function validateSubagentTaskRequest(request: SubagentTaskRequest): Subag
     writablePaths,
     allowedCapabilities: [...new Set(request.allowedCapabilities)],
   };
+}
+
+function validateReviewPolicy(policy: SubagentReviewPolicy): void {
+  if (policy !== "none" && policy !== "reviewer" && policy !== "reviewerAndTester") {
+    throw new Error(`无效的子 Agent 门禁策略：${String(policy)}`);
+  }
 }
 
 function uniqueNormalized(paths: readonly string[]): readonly string[] {

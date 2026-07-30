@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDirectory, "../..");
 const pin = JSON.parse(await readFile(resolve(scriptDirectory, "source-pin.json"), "utf8"));
-const codeOssRoot = resolve(projectRoot, "upstream", `code-oss-${pin.version}`);
+const codeOssRoot = resolve(projectRoot, "..", "code-oss-1.74.0-phase12-overlay");
 const overlayRoot = resolve(projectRoot, "overlays/code-oss/src");
 const contributionPath = resolve(
   overlayRoot,

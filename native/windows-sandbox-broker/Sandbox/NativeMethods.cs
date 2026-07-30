@@ -261,7 +261,9 @@ internal static class NativeMethods
 
     internal static void ThrowLastWin32(string operation)
     {
-        throw new Win32Exception(Marshal.GetLastWin32Error(), operation);
+        var code = Marshal.GetLastWin32Error();
+        var detail = new Win32Exception(code).Message;
+        throw new Win32Exception(code, $"{operation}（Win32 {code}：{detail}）");
     }
 
     private static bool HasExports(string library, params string[] exports)

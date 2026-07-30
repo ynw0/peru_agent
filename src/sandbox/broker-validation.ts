@@ -6,6 +6,10 @@ import {
   type DiscardPowerShellAnalysisResult,
   type PowerShellAnalysisResult,
   type PowerShellExecutionResult,
+  type PowerShellTerminalStartedResult,
+  type PowerShellTerminalOutput,
+  type WritePowerShellTerminalResult,
+  type CancelPowerShellTerminalResult,
   type WindowsSandboxFeatures,
 } from "./broker-protocol.js";
 
@@ -200,6 +204,51 @@ export function validatePowerShellExecution(value: unknown): PowerShellExecution
   };
 }
 
+export function validatePowerShellTerminalStarted(value: unknown): PowerShellTerminalStartedResult {
+  const record = asRecord(value, "后台终端启动结果");
+  const auditLogPath = requireString(record, "auditLogPath", "后台终端启动结果");
+  if (!WINDOWS_ABSOLUTE_PATH.test(auditLogPath)) {
+    throw new Error("后台终端 auditLogPath 必须是绝对 Windows 路径");
+  }
+  return {
+    terminalId: requireString(record, "terminalId", "后台终端启动结果"),
+    analysisId: requireString(record, "analysisId", "后台终端启动结果"),
+    scriptSha256: requireSha256(record, "scriptSha256", "后台终端启动结果"),
+    auditLogPath,
+  };
+}
+
+export function validatePowerShellTerminalOutput(value: unknown): PowerShellTerminalOutput {
+  const record = asRecord(value, "后台终端输出");
+  const completed = requireBoolean(record, "completed", "后台终端输出");
+  const exitCode = record.exitCode;
+  if (completed && !Number.isInteger(exitCode)) {
+    throw new Error("已完成的后台终端输出必须包含整数 exitCode");
+  }
+  if (!completed && exitCode !== undefined) {
+    throw new Error("运行中的后台终端输出不能包含 exitCode");
+  }
+  return {
+    terminalId: requireString(record, "terminalId", "后台终端输出"),
+    cursor: requireNonNegativeInteger(record, "cursor", "后台终端输出"),
+    stdout: typeof record.stdout === "string" ? record.stdout : (() => { throw new Error("后台终端输出.stdout 必须是字符串"); })(),
+    stderr: typeof record.stderr === "string" ? record.stderr : (() => { throw new Error("后台终端输出.stderr 必须是字符串"); })(),
+    completed,
+    ...(completed ? { exitCode: Number(exitCode) } : {}),
+    timedOut: requireBoolean(record, "timedOut", "后台终端输出"),
+    interrupted: requireBoolean(record, "interrupted", "后台终端输出"),
+  };
+}
+
+export function validateWritePowerShellTerminal(value: unknown): WritePowerShellTerminalResult {
+  const record = asRecord(value, "后台终端写入结果");
+  return { accepted: requireBoolean(record, "accepted", "后台终端写入结果") };
+}
+
+export function validateCancelPowerShellTerminal(value: unknown): CancelPowerShellTerminalResult {
+  const record = asRecord(value, "后台终端取消结果");
+  return { canceled: requireBoolean(record, "canceled", "后台终端取消结果") };
+}
 export function validateCancelPowerShell(value: unknown): CancelPowerShellResult {
   const record = asRecord(value, "PowerShell 取消结果");
   return { canceled: requireBoolean(record, "canceled", "取消结果") };

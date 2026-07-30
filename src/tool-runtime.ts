@@ -10,6 +10,7 @@ export interface ToolManifest {
   readonly riskLevel: ToolRiskLevel;
   readonly capabilities: readonly Capability[];
   readonly generated: boolean;
+  readonly visibility?: "public" | "subagent";
 }
 
 export interface ToolInspection {
@@ -19,6 +20,7 @@ export interface ToolInspection {
   readonly requestedCapabilities?: readonly Capability[];
   readonly networkTargets?: readonly string[];
   readonly commands?: readonly string[];
+  readonly commandText?: string;
   readonly sandboxRequired?: boolean;
   // 人类可读原因会显示在权限中心，不能只展示抽象能力枚举。
   readonly reason?: string;
@@ -36,6 +38,7 @@ export interface ToolExecutionContext {
   readonly workspaceId: string;
   readonly toolCallId: string;
   readonly signal: AbortSignal;
+  readonly workspaceWriteMode?: "interactiveDiff" | "isolatedAutoApply";
   reportProgress(message: string): Promise<void>;
 }
 
@@ -102,6 +105,16 @@ export class ToolRegistry {
 
   public get(name: string): Tool<unknown, unknown> | undefined {
     return this.tools.get(name);
+  }
+
+  public listManifests(
+    predicate: (manifest: ToolManifest) => boolean = () => true,
+  ): readonly ToolManifest[] {
+    return [...this.tools.values()]
+      .map(tool => tool.manifest)
+      .filter(predicate)
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map(manifest => structuredClone(manifest));
   }
 
   public listModelDefinitions(

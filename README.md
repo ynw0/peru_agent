@@ -1,8 +1,32 @@
-# Independent AI IDE
+# peru_agent
 
 完全自研 Agent Runtime、基于 Code OSS 的独立 AI IDE。Claude Code 源码仅作为只读架构参考，不参与产品构建。
 
 ## 当前完成状态
+
+### TypeScript TUI Agent
+
+核心 Agent 现在可以直接通过单 Node.js 进程的 Ink TUI 运行，不依赖 Code OSS 或 Electron：
+
+```powershell
+.\tui.ps1 -Workspace "F:\study\project"
+```
+
+日常启动推荐使用仓库根目录的 `tui.ps1`：它固定使用仓库内 Node 22，按源码摘要决定是否需要编译，并在缺少 TypeScript、Ink、React 或 Sandbox Broker 时给出明确的本地修复命令。开发时仍可使用 `npm run tui -- <workspace>`；`-ForceBuild` 强制重编译，`-BuildOnly` 只构建不启动。
+
+真实闭环验收使用显式的隔离命令，不会触碰当前工作区或用户会话数据：
+
+```powershell
+.\tui.ps1 -E2E
+```
+
+该命令从现有配置读取模型和 Broker，在系统临时目录创建工作区，严格验证 `Read → Edit → PowerShell`、Diff、Checkpoint、Broker stdout 和会话恢复；失败时保留 `e2e-report.json` 路径，成功后自动清理临时目录。
+
+首次运行会进入 TUI 配置向导，默认使用已确认的 `http://127.0.0.1:1234/v1` 和 `google/gemma-4-e2b`，API Key 直接填写并保存到配置文件（界面和 Doctor 永不显示值），同时自动探测当前安装包内的 Windows Sandbox Broker。也可以先复制 `docs/tui-config.example.json` 到 `%USERPROFILE%\.independent-ai-agent\config.json`。保存前会检查模型 ID 和 Broker 能力。首版注册工作区、Excel、PDF、Word 和 PowerShell 工具；写文件会暂停在 Diff 审核，PowerShell 会暂停在权限确认。
+
+日常输入支持 `/` 命令补全、`@文件` 附件、Shift+Enter/Alt+Enter 多行、Ctrl+R 历史和 Ctrl+O Verbose Transcript。会话可用 `/rename`、`/resume`、`/export`、`/compact`、`/context`、`/usage`、`/queue` 管理；运行中提交会提示立即中断、引导当前运行或排队下一轮。
+
+运行中可使用 `/config` 在当前 Ink 画面内编辑并验证模型、Chat Completions 路径、API Key 和默认权限/网络模式；Broker 路径自动解析，验证或切换失败会保留原会话。`/doctor` 显示当前工作区、配置、数据目录、精确模型 ID 和 Broker 健康状态，不显示密钥。对话支持鼠标滚轮、`PageUp/PageDown`、`Ctrl+Home/Ctrl+End` 按终端行浏览，向上浏览时新输出会显示未读行数；输入框支持 Home/End、Delete、上下历史、粘贴、`Ctrl+U` 清行、`Ctrl+W` 删词和 `Ctrl+K` 删除到行尾。主时间线按真实 Session 消息顺序显示，Tool 默认四行摘要，完整脚本与结果在详情面板中查看。
 
 - Phase 0：安全规则、协议和 TypeScript strict 基线；
 - Phase 1：独立产品身份、Typed IPC 和 Workbench 容器；

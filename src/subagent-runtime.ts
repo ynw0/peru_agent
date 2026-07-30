@@ -32,6 +32,7 @@ export function validateSubagentAssignment(assignment: SubagentAssignment): void
       maxTotalTokens: assignment.tokenBudget,
       maxDurationMs: 60_000,
     },
+    reviewPolicy: "reviewerAndTester",
   };
   validateSubagentTaskRequest(request);
 }

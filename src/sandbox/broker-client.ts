@@ -3,8 +3,16 @@ import type {
   AnalyzePowerShellRequest,
   BrokerHelloResult,
   ExecutePowerShellRequest,
+  StartPowerShellTerminalRequest,
+  ReadPowerShellTerminalRequest,
+  WritePowerShellTerminalRequest,
+  CancelPowerShellTerminalRequest,
   PowerShellAnalysisResult,
   PowerShellExecutionResult,
+  PowerShellTerminalStartedResult,
+  PowerShellTerminalOutput,
+  WritePowerShellTerminalResult,
+  CancelPowerShellTerminalResult,
   WindowsSandboxFeatures,
 } from "./broker-protocol.js";
 import type { SandboxBrokerTransport } from "./broker-transport.js";
@@ -13,6 +21,10 @@ import {
   validateDiscardPowerShellAnalysis,
   validatePowerShellAnalysis,
   validatePowerShellExecution,
+  validatePowerShellTerminalStarted,
+  validatePowerShellTerminalOutput,
+  validateWritePowerShellTerminal,
+  validateCancelPowerShellTerminal,
 } from "./broker-validation.js";
 
 const REQUIRED_FEATURES: readonly (keyof WindowsSandboxFeatures)[] = [
@@ -96,6 +108,57 @@ export class WindowsSandboxBrokerClient {
     return result;
   }
 
+  public async startPowerShellTerminal(
+    request: StartPowerShellTerminalRequest,
+    signal?: AbortSignal,
+  ): Promise<PowerShellTerminalStartedResult> {
+    this.assertInitialized();
+    if (sha256Text(request.script) !== request.scriptSha256) {
+      throw new Error("后台终端启动脚本与已分析脚本不一致");
+    }
+    const result = validatePowerShellTerminalStarted(
+      await this.transport.request("powershell.terminal.start", request, signal),
+    );
+    if (result.terminalId !== request.terminalId || result.analysisId !== request.analysisId
+      || result.scriptSha256 !== request.scriptSha256) {
+      throw new Error("后台终端启动结果与当前请求不匹配");
+    }
+    return result;
+  }
+
+  public async readPowerShellTerminal(
+    request: ReadPowerShellTerminalRequest,
+    signal?: AbortSignal,
+  ): Promise<PowerShellTerminalOutput> {
+    this.assertInitialized();
+    const result = validatePowerShellTerminalOutput(
+      await this.transport.request("powershell.terminal.read", request, signal),
+    );
+    if (result.terminalId !== request.terminalId || result.cursor < request.cursor) {
+      throw new Error("后台终端读取结果与请求不匹配");
+    }
+    return result;
+  }
+
+  public async writePowerShellTerminal(
+    request: WritePowerShellTerminalRequest,
+    signal?: AbortSignal,
+  ): Promise<WritePowerShellTerminalResult> {
+    this.assertInitialized();
+    return validateWritePowerShellTerminal(
+      await this.transport.request("powershell.terminal.write", request, signal),
+    );
+  }
+
+  public async cancelPowerShellTerminal(
+    request: CancelPowerShellTerminalRequest,
+    signal?: AbortSignal,
+  ): Promise<CancelPowerShellTerminalResult> {
+    this.assertInitialized();
+    return validateCancelPowerShellTerminal(
+      await this.transport.request("powershell.terminal.cancel", request, signal),
+    );
+  }
   public dispose(): void {
     this.transport.dispose();
   }

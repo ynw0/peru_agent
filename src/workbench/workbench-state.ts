@@ -21,6 +21,9 @@ export interface PendingPermissionView {
   readonly riskLevel: ToolRiskLevel;
   readonly capabilities: readonly Capability[];
   readonly affectedFiles: readonly string[];
+  readonly networkTargets: readonly string[];
+  readonly commands: readonly string[];
+  readonly commandText?: string;
   readonly reason: string;
 }
 
@@ -33,7 +36,11 @@ export interface ToolActivityView {
   readonly affectedFiles: readonly string[];
   readonly networkTargets: readonly string[];
   readonly commands: readonly string[];
+  readonly commandText?: string;
   readonly progressMessages: readonly string[];
+  readonly outputPreview?: string;
+  readonly outputTruncated?: boolean;
+  readonly outputIsError?: boolean;
   readonly state: "requested" | "running" | "completed" | "failed";
 }
 
@@ -65,11 +72,21 @@ export interface SubagentTaskView {
   readonly taskId: string;
   readonly role: "planner" | "explorer" | "implementer" | "reviewer" | "tester";
   readonly depth: number;
-  readonly status: "queued" | "running" | "completed" | "failed" | "aborted" | "patchProposed" | "merged";
+  readonly status: "queued" | "running" | "completed" | "failed" | "aborted" | "patchProposed" | "merged" | "gating" | "noChanges" | "patchRejected" | "interrupted" | "gateInterrupted";
   readonly workspaceId?: string;
   readonly verdict?: "approved" | "rejected";
   readonly proposalId?: string;
   readonly error?: { readonly code: string; readonly message: string };
+  readonly planId?: string;
+  readonly planStepId?: string;
+  readonly attemptId?: string;
+  readonly outputCommitId?: string;
+  readonly sourceCommitId?: string;
+  readonly repairOfTaskId?: string;
+  readonly rejectionCount?: number;
+  readonly stableReason?: string;
+  readonly gateTaskIds?: readonly string[];
+  readonly gateAttempts?: readonly { readonly taskId: string; readonly role: "reviewer" | "tester"; readonly status: string; readonly report?: unknown; readonly updatedAt: string }[];
 }
 
 // WorkbenchSnapshot 是 UI 可恢复状态；UI 组件不得各自维护另一份事实来源。
@@ -131,6 +148,13 @@ export function projectWorkbenchSnapshot(
         completed: false,
         aborted: false,
       };
+    case "session.renamed":
+    case "session.compacted":
+    case "session.input.queued":
+    case "session.input.dequeued":
+      return current;
+    case "session.compaction.failed":
+      return { ...current, failed: { code: event.code, message: event.message } };
     case "session.started":
       {
         const { failed: _failed, ...rest } = current;
@@ -247,8 +271,9 @@ export function projectWorkbenchSnapshot(
         tools: updateTool(current.tools, event.toolCallId, tool => ({
           ...tool,
           affectedFiles: [...event.affectedFiles],
-          networkTargets: [...event.networkTargets],
-          commands: [...event.commands],
+          networkTargets: [...(event.networkTargets ?? [])],
+          commands: [...(event.commands ?? [])],
+          ...(event.commandText === undefined ? {} : { commandText: event.commandText }),
         })),
       };
     case "tool.started":
@@ -280,6 +305,9 @@ export function projectWorkbenchSnapshot(
             riskLevel: event.riskLevel,
             capabilities: [...event.capabilities],
             affectedFiles: [...event.affectedFiles],
+            networkTargets: [...(event.networkTargets ?? [])],
+            commands: [...(event.commands ?? [])],
+            ...(event.commandText === undefined ? {} : { commandText: event.commandText }),
             reason: event.reason,
           },
         ],
@@ -298,6 +326,16 @@ export function projectWorkbenchSnapshot(
         tools: updateTool(current.tools, event.toolCallId, tool => ({
           ...tool,
           state: event.success ? "completed" : "failed",
+        })),
+      };
+    case "tool.result":
+      return {
+        ...current,
+        tools: updateTool(current.tools, event.toolCallId, tool => ({
+          ...tool,
+          outputPreview: event.outputPreview,
+          outputTruncated: event.truncated,
+          outputIsError: event.isError,
         })),
       };
     case "diff.proposed":
@@ -352,6 +390,9 @@ export function projectWorkbenchSnapshot(
             role: event.role,
             depth: event.depth,
             status: "queued",
+            ...(event.planId === undefined ? {} : { planId: event.planId }),
+            ...(event.planStepId === undefined ? {} : { planStepId: event.planStepId }),
+            ...(event.attemptId === undefined ? {} : { attemptId: event.attemptId }),
           },
         ],
       };
@@ -371,6 +412,8 @@ export function projectWorkbenchSnapshot(
           ...task,
           status: "completed",
           ...(event.verdict === undefined ? {} : { verdict: event.verdict }),
+          ...(event.outputCommitId === undefined ? {} : { outputCommitId: event.outputCommitId }),
+          ...(event.stableReason === undefined ? {} : { stableReason: event.stableReason }),
         })),
       };
     case "subagent.task.failed":
@@ -387,6 +430,44 @@ export function projectWorkbenchSnapshot(
         ...current,
         subagents: updateSubagent(current.subagents, event.taskId, task => ({ ...task, status: "aborted" })),
       };
+    case "subagent.task.interrupted":
+      return {
+        ...current,
+        subagents: updateSubagent(current.subagents, event.taskId, task => ({
+          ...task,
+          status: event.status,
+          stableReason: event.status,
+          error: { code: event.code, message: event.message },
+        })),
+      };
+    case "subagent.task.status":
+      return {
+        ...current,
+        subagents: updateSubagent(current.subagents, event.taskId, task => ({
+          ...task,
+          status: event.status,
+          stableReason: event.status,
+          ...(event.gateTaskIds === undefined ? {} : { gateTaskIds: [...event.gateTaskIds] }),
+          ...(event.message === undefined ? {} : { error: { code: `SUBAGENT_${event.status.toUpperCase()}`, message: event.message } }),
+        })),
+      };
+    case "subagent.gate.attempt":
+      return {
+        ...current,
+        subagents: updateSubagent(current.subagents, event.targetTaskId, task => ({
+          ...task,
+          gateAttempts: [
+            ...(task.gateAttempts ?? []).filter(item => item.taskId !== event.taskId),
+            {
+              taskId: event.taskId,
+              role: event.role,
+              status: event.status,
+              ...(event.summary === undefined ? {} : { report: { summary: event.summary } }),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        })),
+      };
     case "subagent.patch.proposed":
       return {
         ...current,
@@ -394,6 +475,7 @@ export function projectWorkbenchSnapshot(
           ...task,
           status: "patchProposed",
           proposalId: event.proposalId,
+          gateTaskIds: [...event.gateTaskIds],
         })),
       };
     case "subagent.task.merged":

@@ -15,6 +15,7 @@ validateSubagentTaskRequest({
     maxTotalTokens: 1_000,
     maxDurationMs: 60_000,
   },
+  reviewPolicy: "reviewerAndTester",
 });
 
 console.log("AI IDE Phase 8 Smoke Test 通过");

@@ -1,0 +1,24 @@
+{
+  "id": "diff-e3590611-3a4d-4722-bb38-2d78268c338d",
+  "sessionId": "session-a77d1a43-fb15-4692-a4d2-571bc4f42d00",
+  "workspaceId": "workspace-a80b7b9f7a6a29241a40c04e",
+  "toolCallId": "303009145",
+  "createdAt": "2026-07-30T08:32:40.127Z",
+  "status": "accepted",
+  "changes": [
+    {
+      "path": "note.txt",
+      "before": {
+        "path": "note.txt",
+        "exists": true,
+        "content": "before",
+        "sha256": "6db7d803e74f1ffa7d8f5adc0bf95b3e15bf4c8373fffadf546227cc6c6742cb",
+        "byteLength": 6
+      },
+      "afterContent": "after",
+      "afterSha256": "f39592393ef0859cb196a52693d2cea00fb2df784b3c04ae54aa7cadb8e562f8",
+      "unifiedDiff": "--- a/note.txt\n+++ b/note.txt\n@@ -1,1 +1,1 @@\n-before\n+after"
+    }
+  ],
+  "checkpointId": "checkpoint-fa2d0289-b291-4366-9806-84bcc0663352"
+}

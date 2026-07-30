@@ -23,27 +23,13 @@ const SUFFIX_LINE_LIMIT = 100;
 const PREFIX_CHAR_LIMIT = 24_000;
 const SUFFIX_CHAR_LIMIT = 12_000;
 
-interface IndependentAiIdeInlineCompletionItem {
-	readonly insertText: string;
-	readonly range: Range;
-	readonly command: {
-		readonly id: string;
-		readonly title: string;
-		readonly arguments: readonly string[];
-	};
-}
-
-interface IndependentAiIdeInlineCompletions extends InlineCompletions<IndependentAiIdeInlineCompletionItem> {
-	readonly items: readonly IndependentAiIdeInlineCompletionItem[];
-}
-
-class IndependentAiIdeInlineCompletionProvider implements InlineCompletionsProvider<IndependentAiIdeInlineCompletions> {
+class IndependentAiIdeInlineCompletionProvider implements InlineCompletionsProvider {
 	public async provideInlineCompletions(
 		model: ITextModel,
 		position: Position,
 		_context: InlineCompletionContext,
 		token: CancellationToken,
-	): Promise<IndependentAiIdeInlineCompletions> {
+	): Promise<InlineCompletions> {
 		const bridge = getIndependentAiIdeCompletionBridge();
 		if (bridge === undefined || token.isCancellationRequested) {
 			return { items: [] };
@@ -80,7 +66,7 @@ class IndependentAiIdeInlineCompletionProvider implements InlineCompletionsProvi
 		}
 	}
 
-	public freeInlineCompletions(_completions: IndependentAiIdeInlineCompletions): void {
+	public freeInlineCompletions(_completions: InlineCompletions): void {
 		// Provider 不在 Workbench 进程持有模型资源。
 	}
 }

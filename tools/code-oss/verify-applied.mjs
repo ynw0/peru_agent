@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDirectory, "../..");
 const pin = JSON.parse(await readFile(resolve(scriptDirectory, "source-pin.json"), "utf8"));
-const codeOssRoot = resolve(projectRoot, "upstream", `code-oss-${pin.version}`);
+const codeOssRoot = resolve(projectRoot, "..", "code-oss-1.74.0-phase12-overlay");
 const product = JSON.parse(await readFile(resolve(codeOssRoot, "product.json"), "utf8"));
 const desktopMain = await readFile(resolve(codeOssRoot, "src/vs/workbench/workbench.desktop.main.ts"), "utf8");
 const contributionPath = resolve(codeOssRoot, "src/vs/workbench/contrib/independentAiIde/browser/independentAiIde.contribution.ts");

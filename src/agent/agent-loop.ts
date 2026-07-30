@@ -9,12 +9,13 @@ import type { EventJournal } from "./event-journal.js";
 import type { IdGenerator } from "./id-generator.js";
 import { PermissionCoordinator, type AgentEventEmitter } from "./permission-coordinator.js";
 import type { AgentSession } from "./session.js";
-import type { AgentRunLimits, AgentRunOptions, AgentSessionSnapshot, ToolAgentMessage } from "./types.js";
+import type { AgentRunLimits, AgentRunOptions, AgentSessionSnapshot, AgentUserInput, ToolAgentMessage } from "./types.js";
 
 export interface AgentLoopOptions {
   readonly systemPrompt: string;
   readonly maxOutputTokensPerTurn: number;
   readonly limits: AgentRunLimits;
+  readonly contextWindowTokens?: number;
 }
 
 export interface AgentLoopDependencies {
@@ -29,6 +30,7 @@ export interface AgentLoopDependencies {
 
 // AgentLoop 只负责一次会话运行；并发、创建、停止和 IPC 由 AgentRuntime 负责。
 export class AgentLoop {
+  private readonly failedCompactions = new Set<string>();
   public constructor(
     private readonly dependencies: AgentLoopDependencies,
     private readonly options: AgentLoopOptions,
@@ -44,7 +46,7 @@ export class AgentLoop {
 
   public async run(
     session: AgentSession,
-    userInput: string,
+    userInput: string | AgentUserInput,
     signal: AbortSignal,
     runOptions: AgentRunOptions = {},
   ): Promise<AgentSessionSnapshot> {
@@ -53,27 +55,50 @@ export class AgentLoop {
     validateLimits(limits);
 
     try {
-      if (userInput.trim() === "") {
+      const normalizedInput: AgentUserInput = typeof userInput === "string" ? { content: userInput } : userInput;
+      if (normalizedInput.content.trim() === "") {
         throw new AgentError("INTERNAL_ERROR", "用户输入不能为空");
       }
 
       const userMessageId = this.dependencies.idGenerator.next("message");
+      const shouldAssignTitle = session.snapshot().title === undefined && session.getMessages().length === 0;
       session.appendMessage({
         id: userMessageId,
         role: "user",
-        content: userInput,
+        content: normalizedInput.content,
+        ...(normalizedInput.displayContent === undefined ? {} : { displayContent: normalizedInput.displayContent }),
+        ...(normalizedInput.attachments === undefined ? {} : { attachments: normalizedInput.attachments.map(item => ({ ...item })) }),
       });
+      if (shouldAssignTitle) {
+        const titleSource = (normalizedInput.displayContent ?? normalizedInput.content).trim();
+        const title = Array.from(titleSource).slice(0, 10).join("");
+        if (title !== "") session.rename(title);
+      }
       await this.persist(session);
+      if (shouldAssignTitle && session.snapshot().title !== undefined) {
+        await emit({
+          type: "session.renamed",
+          sessionId: session.id,
+          title: session.snapshot().title ?? "",
+        });
+      }
       await emit({
         type: "user.message.added",
         sessionId: session.id,
         messageId: userMessageId,
-        content: userInput,
+        content: normalizedInput.content,
       });
 
       let toolCallCount = 0;
+      let runTokenCount = 0;
       for (let turn = 1; turn <= limits.maxTurns; turn += 1) {
         this.assertNotAborted(signal);
+        if (runTokenCount > limits.maxTotalTokens) {
+          throw new AgentError(
+            "TOKEN_BUDGET_EXCEEDED",
+            `本次运行 Token 用量 ${runTokenCount} 超过限制 ${limits.maxTotalTokens}`,
+          );
+        }
         await emit({ type: "model.started", sessionId: session.id, turn });
 
         // 在开始接收 delta 前固定 messageId，UI 才能把流式文本投影到正确消息。
@@ -92,19 +117,13 @@ export class AgentLoop {
           runOptions,
         );
         session.addUsage(response.usage.inputTokens, response.usage.outputTokens);
+        runTokenCount += response.usage.inputTokens + response.usage.outputTokens;
         await emit({
           type: "session.usage.updated",
           sessionId: session.id,
           inputTokens: session.snapshot().usage.inputTokens,
           outputTokens: session.snapshot().usage.outputTokens,
         });
-        if (session.getTotalTokens() > limits.maxTotalTokens) {
-          throw new AgentError(
-            "TOKEN_BUDGET_EXCEEDED",
-            `会话 Token 用量 ${session.getTotalTokens()} 超过限制 ${limits.maxTotalTokens}`,
-          );
-        }
-
         session.appendMessage({
           id: assistantMessageId,
           role: "assistant",
@@ -122,6 +141,16 @@ export class AgentLoop {
           if (response.toolCalls.length !== 0) {
             throw new AgentError("MODEL_PROTOCOL_ERROR", "finish_reason=stop 时不允许包含 ToolCall");
           }
+          const guide = session.takeQueuedInput("guide");
+          if (guide !== undefined) {
+            await emit({ type: "session.input.dequeued", sessionId: session.id, queueId: guide.id });
+            const guideMessageId = this.dependencies.idGenerator.next("message");
+            session.appendMessage({ id: guideMessageId, role: "user", content: guide.input.content, ...(guide.input.displayContent === undefined ? {} : { displayContent: guide.input.displayContent }), ...(guide.input.attachments === undefined ? {} : { attachments: guide.input.attachments }) });
+            await this.persist(session);
+            await emit({ type: "user.message.added", sessionId: session.id, messageId: guideMessageId, content: guide.input.content });
+            continue;
+          }
+          await this.compactIfNeeded(session, response.usage.inputTokens, signal, emit);
           session.complete();
           await this.persist(session);
           await emit({ type: "session.completed", sessionId: session.id });
@@ -143,9 +172,21 @@ export class AgentLoop {
         for (const toolCall of response.toolCalls) {
           this.assertNotAborted(signal);
           const toolResult = await this.executeTool(session, toolCall, emit, signal, runOptions);
+          session.incrementToolCallCount();
           session.appendMessage(toolResult);
           await this.persist(session);
+          const preview = createOutputPreview(toolResult.content);
+          await emit({
+            type: "tool.result",
+            sessionId: session.id,
+            toolName: toolResult.toolName,
+            toolCallId: toolResult.toolCallId,
+            outputPreview: preview.value,
+            truncated: preview.truncated,
+            isError: toolResult.isError,
+          });
         }
+        await this.compactIfNeeded(session, response.usage.inputTokens, signal, emit);
       }
 
       throw new AgentError(
@@ -178,6 +219,42 @@ export class AgentLoop {
     }
   }
 
+  private async compactIfNeeded(
+    session: AgentSession,
+    inputTokens: number,
+    signal: AbortSignal,
+    emit: AgentEventEmitter,
+  ): Promise<void> {
+    const window = this.options.contextWindowTokens;
+    if (window === undefined || window <= 0 || inputTokens < Math.ceil(window * 0.8)) return;
+    const attemptKey = `${session.id}:${inputTokens}:${session.getMessages().length}`;
+    if (this.failedCompactions.has(attemptKey)) return;
+    const source = session.getMessages();
+    const controller = new AbortController();
+    const abort = (): void => controller.abort();
+    signal.addEventListener("abort", abort, { once: true });
+    let text = "";
+    let usage = { inputTokens: 0, outputTokens: 0 };
+    let finish: "stop" | "tool_calls" | undefined;
+    try {
+      for await (const event of this.dependencies.provider.stream({ systemPrompt: "请将以下会话压缩为结构化、忠实、可继续工作的摘要。", messages: source, tools: [], maxOutputTokens: 4096 }, controller.signal)) {
+        if (event.type === "text.delta") text += event.delta;
+        if (event.type === "response.completed") { finish = event.finishReason; usage = event.usage; }
+      }
+      if (finish !== "stop" || text.trim() === "") throw new AgentError("MODEL_PROTOCOL_ERROR", "自动压缩模型未返回有效摘要");
+      session.compact(text.trim(), source.length);
+      session.addUsage(usage.inputTokens, usage.outputTokens);
+      session.setContextTokens(usage.outputTokens);
+      await this.persist(session);
+      await emit({ type: "session.compacted", sessionId: session.id, sourceMessageCount: source.length });
+    } catch (error: unknown) {
+      this.failedCompactions.add(attemptKey);
+      await emit({ type: "session.compaction.failed", sessionId: session.id, code: error instanceof AgentError ? error.code : "INTERNAL_ERROR", message: error instanceof Error ? error.message : "自动压缩失败" });
+    } finally {
+      signal.removeEventListener("abort", abort);
+    }
+  }
+
   private async collectModelResponse(
     session: AgentSession,
     assistantMessageId: string,
@@ -196,7 +273,7 @@ export class AgentLoop {
       systemPrompt: this.options.systemPrompt,
       messages: session.getMessages(),
       tools: this.dependencies.tools.listModelDefinitions(manifest =>
-        this.isManifestAllowed(manifest.capabilities, runOptions)),
+        this.isToolVisible(manifest, runOptions) && this.isToolAllowed(manifest.name, runOptions) && this.isManifestAllowed(manifest.capabilities, runOptions)),
       maxOutputTokens: this.options.maxOutputTokensPerTurn,
     }, signal)) {
       this.assertNotAborted(signal);
@@ -239,7 +316,7 @@ export class AgentLoop {
     runOptions: AgentRunOptions,
   ): Promise<ToolAgentMessage> {
     const tool = this.dependencies.tools.get(toolCall.name);
-    if (tool !== undefined && !this.isManifestAllowed(tool.manifest.capabilities, runOptions)) {
+    if (tool !== undefined && (!this.isToolVisible(tool.manifest, runOptions) || !this.isToolAllowed(tool.manifest.name, runOptions) || !this.isManifestAllowed(tool.manifest.capabilities, runOptions))) {
       await emit({
         type: "tool.completed",
         sessionId: session.id,
@@ -306,6 +383,7 @@ export class AgentLoop {
         affectedFiles: [...inspection.affectedFiles],
         networkTargets: [...(inspection.networkTargets ?? [])],
         commands: [...(inspection.commands ?? [])],
+        ...(inspection.commandText === undefined ? {} : { commandText: inspection.commandText }),
       });
       const permission = await this.dependencies.permissions.authorize(
         session,
@@ -333,6 +411,7 @@ export class AgentLoop {
         workspaceId: session.workspaceId,
         toolCallId: toolCall.id,
         signal,
+        ...(runOptions.workspaceWriteMode === undefined ? {} : { workspaceWriteMode: runOptions.workspaceWriteMode }),
         reportProgress: async message => {
           if (message.trim() === "") {
             throw new Error("Tool 进度消息不能为空");
@@ -412,6 +491,14 @@ export class AgentLoop {
     return capabilities.every(capability => allowed.has(capability));
   }
 
+  private isToolAllowed(name: string, runOptions: AgentRunOptions): boolean {
+    return runOptions.allowedToolNames === undefined || runOptions.allowedToolNames.includes(name);
+  }
+
+  private isToolVisible(manifest: import("../tool-runtime.js").ToolManifest, runOptions: AgentRunOptions): boolean {
+    return manifest.visibility !== "subagent" || runOptions.allowedToolNames?.includes(manifest.name) === true;
+  }
+
   private createEmitter(session: AgentSession): AgentEventEmitter {
     return async event => {
       await this.dependencies.journal.append(event);
@@ -437,4 +524,16 @@ function validateLimits(limits: AgentRunLimits): void {
       throw new Error(`${name} 必须是正整数`);
     }
   }
+}
+
+function createOutputPreview(content: string): { readonly value: string; readonly truncated: boolean } {
+  const maximumCharacters = 8 * 1024;
+  if (content.length <= maximumCharacters) {
+    return { value: content, truncated: false };
+  }
+  const half = Math.floor(maximumCharacters / 2);
+  return {
+    value: `${content.slice(0, half)}\n…（结果过长，中间内容已省略；查看会话可获取完整结果）…\n${content.slice(-half)}`,
+    truncated: true,
+  };
 }

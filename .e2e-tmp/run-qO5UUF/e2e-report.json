@@ -1,0 +1,39 @@
+{
+  "ok": false,
+  "workspaceRoot": "C:\\peru_agent\\.e2e-tmp\\run-qO5UUF\\workspace",
+  "dataDirectory": "C:\\peru_agent\\.e2e-tmp\\run-qO5UUF\\data",
+  "steps": [
+    {
+      "name": "加载并检查现有配置",
+      "status": "passed",
+      "startedAt": "2026-07-30T08:34:52.211Z",
+      "durationMs": 339,
+      "details": {
+        "model": "google/gemma-4-e2b",
+        "modelEndpointOk": true,
+        "brokerVersion": "1.0.0.0",
+        "brokerProtocolVersion": 2
+      }
+    },
+    {
+      "name": "严格执行 Read → Edit → PowerShell",
+      "status": "passed",
+      "startedAt": "2026-07-30T08:34:52.762Z",
+      "durationMs": 10305,
+      "details": {
+        "runId": "run-9ab2613b-2412-4046-ad3a-84854e6e5950",
+        "sessionId": "session-3b19923d-e2c0-4947-bf37-7dd194d784f1",
+        "diffReviewsAccepted": 0,
+        "permissionReviewsAccepted": 0
+      }
+    },
+    {
+      "name": "验证文件、Checkpoint、Broker 结果和回灌",
+      "status": "failed",
+      "startedAt": "2026-07-30T08:35:03.067Z",
+      "durationMs": 1,
+      "message": "note.txt 内容不正确：before"
+    }
+  ],
+  "failureReportPath": "C:\\peru_agent\\.e2e-tmp\\run-qO5UUF\\e2e-report.json"
+}

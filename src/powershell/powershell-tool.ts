@@ -133,6 +133,7 @@ export function createPowerShellTool(
         requestedCapabilities: [...analysis.requestedCapabilities],
         networkTargets: [...analysis.networkTargets],
         commands: analysis.commands.map(command => command.name),
+        commandText: input.script,
         sandboxRequired: true,
       };
     },

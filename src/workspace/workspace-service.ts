@@ -27,6 +27,10 @@ export function sha256Text(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex");
 }
 
+export function sha256Bytes(content: Uint8Array): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
 function createGlobRegex(pattern: string): RegExp {
   const normalized = normalizeWorkspacePath(pattern);
   let source = "^";
@@ -109,8 +113,50 @@ export class WorkspaceService {
     return snapshot;
   }
 
+  public async readBytes(path: string): Promise<WorkspaceFileSnapshot> {
+    const resolved = await this.guard.resolve(path);
+    try {
+      const status = await lstat(resolved.absolutePath);
+      if (!status.isFile()) throw new Error(`路径不是普通文件：${resolved.relativePath}`);
+      const bytes = await readFile(resolved.absolutePath);
+      return {
+        path: resolved.relativePath,
+        exists: true,
+        content: null,
+        bytesBase64: bytes.toString("base64"),
+        sha256: sha256Bytes(bytes),
+        byteLength: bytes.byteLength,
+      };
+    } catch (error: unknown) {
+      if (isMissingPathError(error)) {
+        return { path: resolved.relativePath, exists: false, content: null, sha256: null, byteLength: 0 };
+      }
+      throw error;
+    }
+  }
+
   public writeText(request: WorkspaceWriteRequest): Promise<WorkspaceFileSnapshot> {
     return this.enqueueMutation(() => this.writeTextInternal(request));
+  }
+
+  public writeBytes(request: { readonly path: string; readonly bytes: Uint8Array; readonly expectedSha256: string | null }): Promise<WorkspaceFileSnapshot> {
+    return this.enqueueMutation(async () => {
+      const resolved = await this.guard.resolve(request.path);
+      const current = await this.readBytes(resolved.relativePath);
+      if (current.sha256 !== request.expectedSha256) throw new WorkspaceConflictError(resolved.relativePath, request.expectedSha256, current.sha256);
+      await mkdir(dirname(resolved.absolutePath), { recursive: true });
+      const temporaryPath = `${resolved.absolutePath}.independent-ai-ide-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`;
+      await writeFile(temporaryPath, request.bytes);
+      try {
+        const latest = await this.readBytes(resolved.relativePath);
+        if (latest.sha256 !== request.expectedSha256) throw new WorkspaceConflictError(resolved.relativePath, request.expectedSha256, latest.sha256);
+        await rename(temporaryPath, resolved.absolutePath);
+      } catch (error: unknown) {
+        await rm(temporaryPath, { force: true });
+        throw error;
+      }
+      return this.readBytes(resolved.relativePath);
+    });
   }
 
   private async writeTextInternal(request: WorkspaceWriteRequest): Promise<WorkspaceFileSnapshot> {

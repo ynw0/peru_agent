@@ -28,9 +28,9 @@ if (-not $version.StartsWith('8.', [StringComparison]::Ordinal)) {
 }
 
 $project = Join-Path $PSScriptRoot 'IndependentAiIde.WindowsSandboxBroker.csproj'
-& $dotnet.Source restore $project --use-lock-file
+& $dotnet.Source restore $project --use-lock-file --runtime win-x64
 if ($LASTEXITCODE -ne 0) { throw 'dotnet restore 失败。' }
 & $dotnet.Source build $project --configuration $Configuration --no-restore
 if ($LASTEXITCODE -ne 0) { throw 'dotnet build 失败。' }
-& $dotnet.Source publish $project --configuration $Configuration --no-restore --self-contained true
+& $dotnet.Source publish $project --configuration $Configuration --runtime win-x64 --no-restore --self-contained true
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish 失败。' }

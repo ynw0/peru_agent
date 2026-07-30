@@ -1,5 +1,6 @@
 import type { AgentRuntime } from "../runtime/agent-runtime.js";
 import type { SubagentExecutionResult, SubagentTaskRecord } from "./types.js";
+import type { GateReportStore } from "../orchestration/gate-report-store.js";
 
 export interface SubagentExecutionContext {
   readonly task: SubagentTaskRecord;
@@ -13,10 +14,10 @@ export interface SubagentExecutor {
 
 // AgentRuntime 适配器使用独立会话执行子任务；工具能力仍由 AgentLoop 的运行策略硬限制。
 export class AgentRuntimeSubagentExecutor implements SubagentExecutor {
-  public constructor(private readonly runtime: AgentRuntime) {}
+  public constructor(private readonly runtime: AgentRuntime, private readonly gateReports?: GateReportStore) {}
 
   public async execute(context: SubagentExecutionContext): Promise<SubagentExecutionResult> {
-    const created = await this.runtime.createSession(context.workspaceId, "autoReview");
+    const created = await this.runtime.createSession(context.workspaceId, "fullAccess");
     const abort = () => this.runtime.abortSession(created.id);
     context.signal.addEventListener("abort", abort, { once: true });
     try {
@@ -27,6 +28,8 @@ export class AgentRuntimeSubagentExecutor implements SubagentExecutor {
           maxTotalTokens: context.task.budget.maxTotalTokens,
         },
         allowedCapabilities: context.task.allowedCapabilities,
+        allowedToolNames: roleToolNames(context.task.role),
+        workspaceWriteMode: "isolatedAutoApply",
       });
       const snapshot = await this.runtime.waitForRun(started.runId);
       if (snapshot.status !== "completed") {
@@ -34,6 +37,10 @@ export class AgentRuntimeSubagentExecutor implements SubagentExecutor {
       }
       const lastAssistant = [...snapshot.messages].reverse().find(message => message.role === "assistant");
       const summary = lastAssistant?.role === "assistant" ? lastAssistant.content : "";
+      const gateReport = this.gateReports?.get(snapshot.id);
+      if ((context.task.role === "reviewer" || context.task.role === "tester") && gateReport === undefined) {
+        throw new Error(`${context.task.role} 未提交有效 GateReport`);
+      }
       return {
         summary,
         childSessionId: snapshot.id,
@@ -43,7 +50,8 @@ export class AgentRuntimeSubagentExecutor implements SubagentExecutor {
           turns: snapshot.messages.filter(message => message.role === "assistant").length,
           toolCalls: snapshot.messages.filter(message => message.role === "tool").length,
         },
-        ...parseVerdict(context.task, summary),
+        ...(gateReport === undefined ? {} : { gateReport }),
+        ...(gateReport === undefined ? {} : { verdict: gateReport.verdict }),
       };
     } finally {
       context.signal.removeEventListener("abort", abort);
@@ -51,9 +59,27 @@ export class AgentRuntimeSubagentExecutor implements SubagentExecutor {
   }
 }
 
+export class DeferredAgentRuntimeSubagentExecutor implements SubagentExecutor {
+  private runtime: AgentRuntime | undefined;
+  public constructor(private readonly gateReports?: GateReportStore) {}
+  public bind(runtime: AgentRuntime): void { this.runtime = runtime; }
+  public execute(context: SubagentExecutionContext): Promise<SubagentExecutionResult> {
+    if (this.runtime === undefined) throw new Error("子 Agent 执行器尚未绑定 AgentRuntime");
+    return new AgentRuntimeSubagentExecutor(this.runtime, this.gateReports).execute(context);
+  }
+}
+
+function roleToolNames(role: SubagentTaskRecord["role"]): readonly string[] {
+  const read = ["Read", "Glob", "Grep"];
+  if (role === "implementer") return [...read, "Write", "Edit", "ApplyPatch", "FileDiff"];
+  if (role === "reviewer") return [...read, "FileDiff", "GateReport"];
+  if (role === "tester") return [...read, "PowerShell", "GateReport"];
+  return read;
+}
+
 function buildInstruction(task: SubagentTaskRecord): string {
   const verdictInstruction = task.role === "reviewer" || task.role === "tester"
-    ? "\n最终一行必须严格输出 VERDICT: APPROVED 或 VERDICT: REJECTED。"
+    ? "\n必须调用 GateReport Tool 提交结构化结论；不得通过自然语言替代。"
     : "";
   return [
     `你是 ${task.role} 子 Agent。`,
@@ -68,12 +94,6 @@ function parseVerdict(task: SubagentTaskRecord, summary: string): { readonly ver
   if (task.role !== "reviewer" && task.role !== "tester") {
     return {};
   }
-  const finalLine = summary.trim().split(/\r?\n/).at(-1);
-  if (finalLine === "VERDICT: APPROVED") {
-    return { verdict: "approved" };
-  }
-  if (finalLine === "VERDICT: REJECTED") {
-    return { verdict: "rejected" };
-  }
-  throw new Error(`${task.role} 没有返回严格 Verdict`);
+  void summary;
+  return {};
 }

@@ -1,5 +1,8 @@
 import type {
   AgentMessage,
+  AgentQueuedInput,
+  AgentQueuePriority,
+  AgentUserInput,
   AgentSessionSnapshot,
   AgentSessionStatus,
 } from "./types.js";
@@ -18,6 +21,14 @@ export class AgentSession {
   private lastError: { code: string; message: string } | undefined;
   private inputTokens = 0;
   private outputTokens = 0;
+  private lastInputTokens = 0;
+  private lastOutputTokens = 0;
+  private runCount = 0;
+  private toolCallCount = 0;
+  private contextTokens = 0;
+  private pendingInputs: AgentQueuedInput[] = [];
+  private title: string | undefined;
+  private compaction: { compactedAt: string; count: number } | undefined;
 
   public readonly createdAt: string;
 
@@ -45,6 +56,14 @@ export class AgentSession {
     session.lastError = snapshot.lastError === undefined ? undefined : { ...snapshot.lastError };
     session.inputTokens = snapshot.usage.inputTokens;
     session.outputTokens = snapshot.usage.outputTokens;
+    session.lastInputTokens = snapshot.usage.lastInputTokens ?? 0;
+    session.lastOutputTokens = snapshot.usage.lastOutputTokens ?? 0;
+    session.runCount = snapshot.usage.runCount ?? 0;
+    session.toolCallCount = snapshot.usage.toolCallCount ?? 0;
+    session.contextTokens = snapshot.usage.contextTokens ?? session.lastInputTokens;
+    session.pendingInputs = [...(snapshot.pendingInputs ?? [])].map(item => ({ ...item, input: { ...item.input, ...(item.input.attachments === undefined ? {} : { attachments: item.input.attachments.map(attachment => ({ ...attachment })) }) } }));
+    session.title = snapshot.title;
+    session.compaction = snapshot.compaction === undefined ? undefined : { ...snapshot.compaction };
     return session;
   }
 
@@ -54,6 +73,7 @@ export class AgentSession {
     }
     this.status = "running";
     this.activeRunId = runId;
+    this.runCount += 1;
     this.lastError = undefined;
     this.touch();
   }
@@ -84,6 +104,43 @@ export class AgentSession {
     }
     this.inputTokens += inputTokens;
     this.outputTokens += outputTokens;
+    this.lastInputTokens = inputTokens;
+    this.lastOutputTokens = outputTokens;
+    this.contextTokens = inputTokens;
+    this.touch();
+  }
+  public setContextTokens(value: number): void { this.contextTokens = Math.max(0, Math.floor(value)); this.touch(); }
+
+  public incrementToolCallCount(count = 1): void { this.toolCallCount += count; this.touch(); }
+  public rename(title: string): void { this.title = title.trim() === "" ? undefined : title.trim(); this.touch(); }
+  public enqueueInput(id: string, input: AgentUserInput, priority: AgentQueuePriority): void {
+    this.pendingInputs.push({ id, priority, input, createdAt: nowIso() });
+    this.touch();
+  }
+  public removeQueuedInput(id: string): AgentQueuedInput | undefined {
+    const index = this.pendingInputs.findIndex(item => item.id === id);
+    if (index < 0) return undefined;
+    const [removed] = this.pendingInputs.splice(index, 1);
+    this.touch();
+    return removed;
+  }
+  public takeQueuedInput(priority: AgentQueuePriority): AgentQueuedInput | undefined {
+    const index = this.pendingInputs.findIndex(item => item.priority === priority);
+    if (index < 0) return undefined;
+    const [removed] = this.pendingInputs.splice(index, 1);
+    this.touch();
+    return removed;
+  }
+  public getPendingInputs(): readonly AgentQueuedInput[] { return this.pendingInputs.map(item => ({ ...item, input: { ...item.input, ...(item.input.attachments === undefined ? {} : { attachments: item.input.attachments.map(a => ({ ...a })) }) } })); }
+  public compact(summary: string, sourceMessageCount: number): void {
+    this.messages.splice(0, this.messages.length, {
+      id: `summary-${nowIso()}`,
+      role: "summary",
+      content: summary,
+      compactedAt: nowIso(),
+      sourceMessageCount,
+    });
+    this.compaction = { compactedAt: nowIso(), count: (this.compaction?.count ?? 0) + 1 };
     this.touch();
   }
 
@@ -124,6 +181,7 @@ export class AgentSession {
       id: this.id,
       workspaceId: this.workspaceId,
       permissionMode: this.permissionMode,
+      ...(this.title === undefined ? {} : { title: this.title }),
       status: this.status,
       messages: this.getMessages(),
       createdAt: this.createdAt,
@@ -133,7 +191,14 @@ export class AgentSession {
       usage: {
         inputTokens: this.inputTokens,
         outputTokens: this.outputTokens,
+        lastInputTokens: this.lastInputTokens,
+        lastOutputTokens: this.lastOutputTokens,
+        runCount: this.runCount,
+        toolCallCount: this.toolCallCount,
+        contextTokens: this.contextTokens,
       },
+      ...(this.compaction === undefined ? {} : { compaction: { ...this.compaction } }),
+      pendingInputs: this.getPendingInputs(),
     };
   }
 

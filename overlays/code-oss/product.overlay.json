@@ -26,5 +26,5 @@
   "darwinBundleIdentifier": "com.independentaiide.desktop",
   "linuxIconName": "com.independentaiide.desktop",
   "enableTelemetry": false,
-  "builtInExtensions": []
+  "commit": "independent-ai-ide-0.13.0"
 }

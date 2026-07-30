@@ -7,7 +7,7 @@ interface SearchInput { readonly query: string; readonly maxResults: number }
 
 export interface WebToolDependencies {
   readonly fetch: WebFetchService;
-  readonly search: WebSearchService;
+  readonly search?: WebSearchService;
   readonly getNetworkMode: () => NetworkMode;
 }
 
@@ -85,6 +85,7 @@ export function createWebTools(dependencies: WebToolDependencies): readonly Tool
     async inspect(input, context) {
       if (context === undefined) throw new Error("WebSearch 检查需要 Tool 上下文");
       const mode = dependencies.getNetworkMode();
+      if (dependencies.search === undefined) throw new Error("WebSearch Runtime 未配置");
       const prepared = await dependencies.search.prepare(input.query, input.maxResults, mode, context.signal);
       preparedSearch.set(context.toolCallId, prepared);
       return {
@@ -99,19 +100,22 @@ export function createWebTools(dependencies: WebToolDependencies): readonly Tool
       const prepared = preparedSearch.get(context.toolCallId);
       if (prepared === undefined) throw new Error("WebSearch 缺少已审核出口授权");
       preparedSearch.delete(context.toolCallId);
+      if (dependencies.search === undefined) throw new Error("WebSearch Runtime 未配置");
       return dependencies.search.execute(prepared, context.signal);
     },
     releaseInspection(_input, context) {
       const prepared = preparedSearch.get(context.toolCallId);
       if (prepared !== undefined) {
-        dependencies.search.discard(prepared);
+        dependencies.search?.discard(prepared);
         preparedSearch.delete(context.toolCallId);
       }
     },
     serializeOutput: output => JSON.stringify(output),
   };
 
-  return [fetchTool as Tool<unknown, unknown>, searchTool as Tool<unknown, unknown>];
+  return dependencies.search === undefined
+    ? [fetchTool as Tool<unknown, unknown>]
+    : [fetchTool as Tool<unknown, unknown>, searchTool as Tool<unknown, unknown>];
 }
 
 export function capabilityForMode(mode: NetworkMode): Capability {

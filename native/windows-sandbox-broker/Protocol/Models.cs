@@ -5,7 +5,7 @@ namespace IndependentAiIde.WindowsSandboxBroker.Protocol;
 
 internal static class ProtocolConstants
 {
-    public const int Version = 1;
+    public const int Version = 2;
 }
 
 internal sealed record BrokerRequest(
@@ -73,6 +73,38 @@ internal sealed record CancelPowerShellResult(bool Canceled);
 internal sealed record DiscardPowerShellAnalysisRequest(string AnalysisId);
 internal sealed record DiscardPowerShellAnalysisResult(bool Discarded);
 
+internal sealed record StartPowerShellTerminalRequest(
+    string TerminalId,
+    string AnalysisId,
+    string ScriptSha256,
+    string Script,
+    string Cwd,
+    IReadOnlyList<string> AllowedPaths,
+    string NetworkMode,
+    int TimeoutMs);
+
+internal sealed record PowerShellTerminalStartedResult(
+    string TerminalId,
+    string AnalysisId,
+    string ScriptSha256,
+    string AuditLogPath);
+
+internal sealed record ReadPowerShellTerminalRequest(string TerminalId, long Cursor);
+
+internal sealed record PowerShellTerminalOutput(
+    string TerminalId,
+    long Cursor,
+    string Stdout,
+    string Stderr,
+    bool Completed,
+    int? ExitCode,
+    bool TimedOut,
+    bool Interrupted);
+
+internal sealed record WritePowerShellTerminalRequest(string TerminalId, string Input);
+internal sealed record WritePowerShellTerminalResult(bool Accepted);
+internal sealed record CancelPowerShellTerminalRequest(string TerminalId);
+internal sealed record CancelPowerShellTerminalResult(bool Canceled);
 internal sealed record PowerShellParseError(string Message, int StartOffset, int EndOffset);
 internal sealed record PowerShellCommandInfo(string Name, string Text, int StartOffset, int EndOffset);
 

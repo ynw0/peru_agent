@@ -108,6 +108,13 @@ internal sealed class JsonLinesServer
                 "powershell.cancel" => Cancel(Deserialize<CancelPowerShellRequest>(request)),
                 "powershell.discard-analysis" => new DiscardPowerShellAnalysisResult(
                     _analyzer.Discard(Deserialize<DiscardPowerShellAnalysisRequest>(request).AnalysisId)),
+                "powershell.terminal.start" => await StartTerminalAsync(Deserialize<StartPowerShellTerminalRequest>(request), serverToken)
+                    .ConfigureAwait(false),
+                "powershell.terminal.read" => _executor.ReadTerminal(Deserialize<ReadPowerShellTerminalRequest>(request)),
+                "powershell.terminal.write" => await _executor.WriteTerminalAsync(Deserialize<WritePowerShellTerminalRequest>(request), serverToken)
+                    .ConfigureAwait(false),
+                "powershell.terminal.cancel" => await _executor.CancelTerminalAsync(Deserialize<CancelPowerShellTerminalRequest>(request))
+                    .ConfigureAwait(false),
                 _ => throw new BrokerException("METHOD_NOT_FOUND", $"未知 Broker 方法：{request.Method}"),
             };
             await WriteAsync(output, BrokerResponse.Success(request.Id, result), serverToken).ConfigureAwait(false);
@@ -152,6 +159,21 @@ internal sealed class JsonLinesServer
         }
     }
 
+    private async Task<PowerShellTerminalStartedResult> StartTerminalAsync(
+        StartPowerShellTerminalRequest request,
+        CancellationToken serverToken)
+    {
+        var verified = _analyzer.VerifyExecution(new ExecutePowerShellRequest(
+            request.TerminalId,
+            request.AnalysisId,
+            request.ScriptSha256,
+            request.Script,
+            request.Cwd,
+            request.AllowedPaths,
+            request.NetworkMode,
+            request.TimeoutMs));
+        return await _executor.StartTerminalAsync(request, verified, serverToken).ConfigureAwait(false);
+    }
     private CancelPowerShellResult Cancel(CancelPowerShellRequest request)
     {
         if (!_executions.TryGetValue(request.ExecutionId, out var source))

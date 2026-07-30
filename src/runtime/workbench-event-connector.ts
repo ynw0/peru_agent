@@ -2,6 +2,7 @@ import type { AgentRuntime } from "./agent-runtime.js";
 import type { WorkspaceRuntime } from "./workspace-runtime.js";
 import type { PlanManager } from "../plan/plan-manager.js";
 import type { WorkbenchRuntime } from "./workbench-runtime.js";
+import type { SubagentScheduler } from "../subagent/scheduler.js";
 
 // WorkbenchEventConnector 统一把三个领域 Runtime 的事件送入同一 UI 投影器。
 export class WorkbenchEventConnector {
@@ -12,6 +13,7 @@ export class WorkbenchEventConnector {
     private readonly workspace: WorkspaceRuntime,
     private readonly plans: PlanManager,
     private readonly workbench: WorkbenchRuntime,
+    private readonly scheduler?: SubagentScheduler,
   ) {}
 
   public start(): void {
@@ -19,6 +21,7 @@ export class WorkbenchEventConnector {
       this.agent.onEvent(async event => { await this.workbench.handleEvent(event); }),
       this.workspace.onEvent(async event => { await this.workbench.handleEvent(event); }),
       this.plans.onEvent(async event => { await this.workbench.handleEvent(event); }),
+      ...(this.scheduler === undefined ? [] : [this.scheduler.onEvent(async event => { await this.workbench.handleEvent(event); })]),
     );
   }
 

@@ -7,8 +7,10 @@ import type {
   SubagentExecutionResult,
   SubagentRole,
   SubagentTaskRecord,
+  SubagentTaskRequest,
   SubagentTaskStatus,
   SubagentWorktreeSnapshot,
+  GateReport,
 } from "./types.js";
 
 export interface SubagentTaskStore {
@@ -127,6 +129,11 @@ function validateTask(value: unknown): SubagentTaskRecord {
     writablePaths: requireStringArray(record.writablePaths, "writablePaths"),
     allowedCapabilities: requireStringArray(record.allowedCapabilities, "allowedCapabilities") as Capability[],
     budget: validateBudget(record.budget),
+    reviewPolicy: requireString(record.reviewPolicy, "reviewPolicy") as SubagentTaskRequest["reviewPolicy"],
+    ...(record.planId === undefined ? {} : { planId: requireString(record.planId, "planId") }),
+    ...(record.planStepId === undefined ? {} : { planStepId: requireString(record.planStepId, "planStepId") }),
+    ...(record.sourceCommitId === undefined ? {} : { sourceCommitId: requireString(record.sourceCommitId, "sourceCommitId") }),
+    ...(record.repairOfTaskId === undefined ? {} : { repairOfTaskId: requireString(record.repairOfTaskId, "repairOfTaskId") }),
     ...(record.targetTaskId === undefined
       ? {}
       : { targetTaskId: requireString(record.targetTaskId, "targetTaskId") }),
@@ -137,8 +144,12 @@ function validateTask(value: unknown): SubagentTaskRecord {
     ? undefined
     : requireString(record.patchProposalId, "patchProposalId");
   const error = record.error === undefined ? undefined : validateError(record.error);
+  const gateTaskIds = record.gateTaskIds === undefined ? undefined : requireStringArray(record.gateTaskIds, "gateTaskIds");
+  const gateAttempts = record.gateAttempts === undefined ? undefined : validateGateAttempts(record.gateAttempts);
+  const attemptId = requireString(record.attemptId, "attemptId");
+  const rejectionCount = requireNonNegativeInteger(record.rejectionCount, "rejectionCount");
 
-  if ((status === "completed" || status === "patchProposed" || status === "merged") && result === undefined) {
+  if ((status === "completed" || status === "patchProposed" || status === "merged" || status === "noChanges") && result === undefined) {
     throw new Error(`${status} 任务必须包含执行结果`);
   }
   if ((status === "patchProposed" || status === "merged") && patchProposalId === undefined) {
@@ -151,7 +162,7 @@ function validateTask(value: unknown): SubagentTaskRecord {
   if (status === "merged" && worktree !== undefined) {
     throw new Error("merged 任务不得保留已清理的隔离工作树引用");
   }
-  if ((status === "failed" || status === "aborted") && error === undefined) {
+  if ((status === "failed" || status === "aborted" || status === "interrupted" || status === "gateInterrupted") && error === undefined) {
     throw new Error(`${status} 任务必须包含错误原因`);
   }
   if (worktree !== undefined && worktree.baseWorkspaceId !== request.baseWorkspaceId
@@ -169,7 +180,40 @@ function validateTask(value: unknown): SubagentTaskRecord {
     ...(result === undefined ? {} : { result }),
     ...(patchProposalId === undefined ? {} : { patchProposalId }),
     ...(error === undefined ? {} : { error }),
+    ...(gateTaskIds === undefined ? {} : { gateTaskIds }),
+    ...(gateAttempts === undefined ? {} : { gateAttempts }),
+    attemptId,
+    rejectionCount,
+    ...(record.outputCommitId === undefined ? {} : { outputCommitId: requireString(record.outputCommitId, "outputCommitId") }),
+    ...(record.stableReason === undefined ? {} : { stableReason: validateStableReason(record.stableReason) }),
   };
+}
+
+function validateGateAttempts(value: unknown): NonNullable<SubagentTaskRecord["gateAttempts"]> {
+  if (!Array.isArray(value)) throw new Error("gateAttempts 必须是数组");
+  return value.map((item, index) => {
+    const record = requireRecord(item, `gateAttempts[${index}]`);
+    const role = record.role;
+    const status = record.status;
+    if (role !== "reviewer" && role !== "tester") throw new Error(`gateAttempts[${index}].role 无效`);
+    if (status !== "queued" && status !== "running" && status !== "completed" && status !== "rejected" && status !== "failed" && status !== "interrupted") throw new Error(`gateAttempts[${index}].status 无效`);
+    return {
+      taskId: requireString(record.taskId, `gateAttempts[${index}].taskId`),
+      role,
+      status,
+      ...(record.report === undefined ? {} : { report: validateGateReport(record.report) }),
+      ...(record.error === undefined ? {} : { error: validateError(record.error) }),
+      updatedAt: requireString(record.updatedAt, `gateAttempts[${index}].updatedAt`),
+    };
+  });
+}
+
+function validateStableReason(value: unknown): NonNullable<SubagentTaskRecord["stableReason"]> {
+  if (value === "completed" || value === "noChanges" || value === "patchProposed" || value === "patchRejected"
+    || value === "failed" || value === "interrupted" || value === "gateInterrupted" || value === "merged" || value === "aborted") {
+    return value;
+  }
+  throw new Error("stableReason 无效");
 }
 
 function validateWorktree(value: unknown, taskId: string): SubagentWorktreeSnapshot {
@@ -232,6 +276,21 @@ function validateResult(value: unknown): SubagentExecutionResult {
       ? {}
       : { childSessionId: requireString(record.childSessionId, "result.childSessionId") }),
     ...(verdict === undefined ? {} : { verdict }),
+    ...(record.gateReport === undefined ? {} : { gateReport: validateGateReport(record.gateReport) }),
+  };
+}
+
+function validateGateReport(value: unknown): GateReport {
+  const record = requireRecord(value, "result.gateReport");
+  const verdict = record.verdict;
+  if (verdict !== "approved" && verdict !== "rejected") throw new Error("result.gateReport.verdict 无效");
+  return {
+    verdict,
+    summary: requireString(record.summary, "result.gateReport.summary"),
+    issues: requireStringArray(record.issues, "result.gateReport.issues"),
+    evidence: requireStringArray(record.evidence, "result.gateReport.evidence"),
+    tests: requireStringArray(record.tests, "result.gateReport.tests"),
+    createdAt: requireString(record.createdAt, "result.gateReport.createdAt"),
   };
 }
 
@@ -263,7 +322,8 @@ function requireRole(value: unknown): SubagentRole {
 
 function requireStatus(value: unknown): SubagentTaskStatus {
   if (value === "queued" || value === "running" || value === "completed"
-    || value === "failed" || value === "aborted" || value === "patchProposed" || value === "merged") {
+    || value === "failed" || value === "aborted" || value === "patchProposed" || value === "merged"
+    || value === "gating" || value === "noChanges" || value === "patchRejected" || value === "interrupted" || value === "gateInterrupted") {
     return value;
   }
   throw new Error("status 无效");

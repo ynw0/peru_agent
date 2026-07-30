@@ -44,8 +44,16 @@ interface OpenAIStreamChunk {
 }
 
 function mapMessage(message: AgentMessage): Record<string, unknown> {
+  if (message.role === "summary") {
+    return { role: "system", content: `会话摘要：${message.content}` };
+  }
   if (message.role === "user") {
-    return { role: "user", content: message.content };
+    return {
+      role: "user",
+      content: message.attachments === undefined || message.attachments.length === 0
+        ? message.content
+        : `${message.content}\n\n附件：\n${message.attachments.map(item => `--- ${item.path} (${item.sha256}, ${item.byteLength} bytes) ---\n${item.content ?? "二进制附件；请使用对应文件 Tool 读取。"}`).join("\n")}`,
+    };
   }
 
   if (message.role === "tool") {

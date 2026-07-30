@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import type { WorkspaceFileSnapshot } from "../workspace/types.js";
 import { WorkspaceRegistry, WorkspaceService } from "../workspace/workspace-service.js";
 import { pathInAnyScope } from "./policy.js";
-import type { SubagentPatchChange, SubagentTaskRecord, SubagentWorktreeSnapshot } from "./types.js";
+import type { SubagentCommit, SubagentPatchChange, SubagentTaskRecord, SubagentWorktreeSnapshot } from "./types.js";
 
 export interface SnapshotWorktreeLimits {
   readonly maxFiles: number;
@@ -32,6 +32,7 @@ export class SnapshotWorktreeManager {
   public async create(
     task: SubagentTaskRecord,
     signal?: AbortSignal,
+    seed?: SubagentCommit,
   ): Promise<SubagentWorktreeSnapshot> {
     const root = join(this.isolationRoot, safeId(task.id));
     await rm(root, { recursive: true, force: true });
@@ -44,7 +45,13 @@ export class SnapshotWorktreeManager {
     try {
       assertNotAborted(signal);
       const basePaths = await base.glob("**/*", Math.min(this.limits.maxFiles + 1, 10_000));
-      const scopedPaths = basePaths.filter(path => pathInAnyScope(path, task.allowedPaths));
+      const seedFiles = seed?.files ?? [];
+      const invalidSeed = seedFiles.find(file => !pathInAnyScope(file.path, task.allowedPaths));
+      if (invalidSeed !== undefined) throw new Error(`Repair Commit 超出任务允许路径：${invalidSeed.path}`);
+      const scopedPaths = [...new Set([
+        ...basePaths.filter(path => pathInAnyScope(path, task.allowedPaths)),
+        ...seedFiles.map(file => file.path),
+      ])].sort();
       if (scopedPaths.length > this.limits.maxFiles
         || (basePaths.length === 10_000 && this.limits.maxFiles >= 10_000)) {
         throw new Error(`隔离工作树文件数超过限制 ${this.limits.maxFiles}`);
@@ -54,13 +61,15 @@ export class SnapshotWorktreeManager {
 
       for (const path of scopedPaths) {
         assertNotAborted(signal);
-        const snapshot = await base.readText(path);
+        const baseSnapshot = await base.snapshot(path);
+        const snapshot = baseSnapshot.exists ? await base.readText(path) : baseSnapshot;
         totalBytes += snapshot.byteLength;
         if (totalBytes > this.limits.maxTotalBytes) {
           throw new Error(`隔离工作树总大小超过限制 ${this.limits.maxTotalBytes} 字节`);
         }
         baseFiles.push(snapshot);
-        await isolated.writeText({ path, content: snapshot.content ?? "", expectedSha256: null });
+        const seedFile = seedFiles.find(file => file.path === path);
+        await isolated.writeText({ path, content: seedFile?.after.content ?? snapshot.content ?? "", expectedSha256: null });
       }
 
       assertNotAborted(signal);

@@ -49,8 +49,12 @@ Push-Location $root
 try {
     Invoke-Checked 'yarn' @('compile')
     Invoke-Checked 'yarn' @('gulp', "vscode-win32-$Architecture-min-ci")
+    Invoke-Checked 'npm' @('--prefix', (Join-Path $root '..\ai-ide-phase12'), 'run', 'build')
+    Invoke-Checked 'npm' @('--prefix', (Join-Path $root '..\ai-ide-phase12'), 'run', 'sandbox:build-windows')
 
     $payloadRoot = (Resolve-Path -LiteralPath (Join-Path $root "..\VSCode-win32-$Architecture")).Path
+    Invoke-Checked 'node' @((Join-Path $root '..\ai-ide-phase12\tools\code-oss\package-ai-runtime.mjs'), '--target', $payloadRoot)
+
     $payloadExecutables = Get-ChildItem -LiteralPath $payloadRoot -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dll', '.node' }
     if ($payloadExecutables.Count -eq 0) { throw 'No Windows executable payloads were produced.' }
     foreach ($file in $payloadExecutables) { Sign-And-Verify $file.FullName }

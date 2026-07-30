@@ -2,6 +2,7 @@ import type { AgentEvent } from "../agent-protocol.js";
 import type { EventJournal } from "../agent/event-journal.js";
 import type { CheckpointManager, CheckpointRecord } from "../checkpoint/checkpoint-manager.js";
 import type { DiffManager, DiffProposal } from "../diff/diff-manager.js";
+import { DiffReviewCoordinator } from "../diff/diff-review-coordinator.js";
 import type { WorkspaceFileSnapshot } from "../workspace/types.js";
 import { WorkspaceRegistry, WorkspaceService } from "../workspace/workspace-service.js";
 
@@ -19,6 +20,7 @@ export class WorkspaceRuntime {
     private readonly diffs: DiffManager,
     private readonly checkpoints: CheckpointManager,
     private readonly journal: EventJournal,
+    private readonly diffReviews: DiffReviewCoordinator = new DiffReviewCoordinator(diffs),
   ) {
     this.diffs.onEvent(event => this.emit(event));
   }
@@ -50,11 +52,11 @@ export class WorkspaceRuntime {
   }
 
   public acceptDiff(proposalId: string): Promise<DiffProposal> {
-    return this.enqueueMutation(() => this.diffs.accept(proposalId));
+    return this.enqueueMutation(() => this.diffReviews.resolve(proposalId, "accepted"));
   }
 
   public rejectDiff(proposalId: string): Promise<DiffProposal> {
-    return this.enqueueMutation(() => this.diffs.reject(proposalId));
+    return this.enqueueMutation(() => this.diffReviews.resolve(proposalId, "rejected"));
   }
 
   public listCheckpoints(workspaceId?: string): Promise<readonly CheckpointRecord[]> {

@@ -1,0 +1,4 @@
+
+		// Independent AI Runtime: main process owns runtime and exposes a typed command boundary.
+		const independentAiIdeRuntimeChannel = this._register(new IndependentAiIdeRuntimeChannel(join(this.environmentMainService.userDataPath, 'ai-runtime')));
+		mainProcessElectronServer.registerChannel('independentAiIdeRuntime', independentAiIdeRuntimeChannel);

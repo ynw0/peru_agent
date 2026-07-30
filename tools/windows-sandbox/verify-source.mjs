@@ -11,6 +11,7 @@ const requiredFiles = [
   "PowerShell/WindowsPathPolicy.cs",
   "Sandbox/SandboxCapabilityProbe.cs",
   "Sandbox/WindowsSandboxExecutor.cs",
+  "Sandbox/SandboxTerminalSession.cs",
   "Sandbox/WindowsRestrictedProcess.cs",
   "Sandbox/NativeMethods.cs",
   "Sandbox/AppContainerAclScope.cs",
@@ -22,7 +23,8 @@ const requiredFragments = new Map([
   ["PowerShell/PowerShellAnalyzer.cs", ["Parser.ParseInput", "InvokeMemberExpressionAst", "Invoke-Expression", "ANALYSIS_EXPIRED"]],
   ["Sandbox/WindowsRestrictedProcess.cs", ["CreateRestrictedToken", "CreateProcessAsUser", "AssignProcessToJobObject", "TerminateJobObject", "AppContainerAclScope"]],
   ["Sandbox/NativeMethods.cs", ["CreateAppContainerProfile", "PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES", "JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE"]],
-  ["Protocol/JsonLinesServer.cs", ["powershell.cancel", "powershell.discard-analysis", "ConcurrentDictionary"]],
+  ["Protocol/JsonLinesServer.cs", ["powershell.cancel", "powershell.discard-analysis", "powershell.terminal.start", "ConcurrentDictionary"]],
+  ["Sandbox/SandboxTerminalSession.cs", ["PowerShellTerminalOutput", "CancelAsync", "AppendStdout"]],
 ]);
 
 const forbiddenFragments = [

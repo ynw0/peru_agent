@@ -61,7 +61,6 @@ function requestHealth(url: URL, signal: AbortSignal): Promise<string> {
       path: url.pathname,
       method: "GET",
       headers: { accept: "application/json" },
-      servername: hostname,
       lookup: (_hostname, _options, callback) => callback(null, resolvedAddress, resolvedAddress === "::1" ? 6 : 4),
       timeout: 2_000,
     }, response => {

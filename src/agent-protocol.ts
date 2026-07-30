@@ -55,6 +55,11 @@ export interface PlanStep {
 // Agent 运行过程通过不可变事件传给 IDE；UI 只投影事件，不保存另一份事实状态。
 export type AgentEvent =
   | { type: "session.created"; sessionId: string; workspaceId?: string }
+  | { type: "session.renamed"; sessionId: string; title: string }
+  | { type: "session.compacted"; sessionId: string; sourceMessageCount: number }
+  | { type: "session.compaction.failed"; sessionId: string; code: string; message: string }
+  | { type: "session.input.queued"; sessionId: string; queueId: string; priority: "guide" | "next" | "immediate" }
+  | { type: "session.input.dequeued"; sessionId: string; queueId: string }
   | { type: "session.started"; sessionId: string; runId: string }
   | { type: "user.message.added"; sessionId: string; messageId: string; content: string }
   | {
@@ -110,8 +115,9 @@ export type AgentEvent =
     toolName: string;
     riskLevel: ToolRiskLevel;
     affectedFiles: string[];
-    networkTargets: string[];
-    commands: string[];
+    networkTargets?: string[];
+    commands?: string[];
+    commandText?: string;
   }
   | { type: "tool.started"; sessionId: string; toolName: string; toolCallId: string }
   | {
@@ -130,6 +136,9 @@ export type AgentEvent =
     riskLevel: ToolRiskLevel;
     capabilities: Capability[];
     affectedFiles: string[];
+    networkTargets?: string[];
+    commands?: string[];
+    commandText?: string;
     reason: string;
   }
   | {
@@ -144,6 +153,15 @@ export type AgentEvent =
     toolName: string;
     success: boolean;
     toolCallId: string;
+  }
+  | {
+    type: "tool.result";
+    sessionId: string;
+    toolName: string;
+    toolCallId: string;
+    outputPreview: string;
+    truncated: boolean;
+    isError: boolean;
   }
   | { type: "diff.proposed"; sessionId: string; proposalId: string; affectedFiles: string[] }
   | {
@@ -161,6 +179,9 @@ export type AgentEvent =
     taskId: string;
     role: "planner" | "explorer" | "implementer" | "reviewer" | "tester";
     depth: number;
+    planId?: string;
+    planStepId?: string;
+    attemptId?: string;
   }
   | { type: "subagent.task.started"; sessionId: string; taskId: string; workspaceId: string }
   | {
@@ -169,9 +190,36 @@ export type AgentEvent =
     taskId: string;
     role: "planner" | "explorer" | "implementer" | "reviewer" | "tester";
     verdict?: "approved" | "rejected";
+    outputCommitId?: string;
+    stableReason?: string;
   }
   | { type: "subagent.task.failed"; sessionId: string; taskId: string; code: string; message: string }
   | { type: "subagent.task.aborted"; sessionId: string; taskId: string }
+  | {
+    type: "subagent.task.interrupted";
+    sessionId: string;
+    taskId: string;
+    status: "interrupted" | "gateInterrupted";
+    code: string;
+    message: string;
+  }
+  | {
+    type: "subagent.task.status";
+    sessionId: string;
+    taskId: string;
+    status: "gating" | "noChanges" | "patchRejected";
+    gateTaskIds?: string[];
+    message?: string;
+  }
+  | {
+    type: "subagent.gate.attempt";
+    sessionId: string;
+    taskId: string;
+    targetTaskId: string;
+    role: "reviewer" | "tester";
+    status: "approved" | "rejected" | "failed" | "interrupted";
+    summary?: string;
+  }
   | {
     type: "subagent.patch.proposed";
     sessionId: string;

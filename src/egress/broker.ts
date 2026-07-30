@@ -116,6 +116,15 @@ export class EgressBroker {
     return this.leases.delete(leaseId);
   }
 
+  // Browser Proxy 的 CONNECT 隧道没有完整 HTTP 响应，仍必须消费一次已审核
+  // Lease，并返回固定 DNS 地址；调用方不能重新解析原始主机名。
+  public consumeAuthorizationForTunnel(
+    leaseId: string,
+    request: EgressAuthorizationRequest,
+  ): EgressAuthorizationLease {
+    return structuredClone(this.consumeLease(leaseId, request));
+  }
+
   public async fetchAuthorized(
     leaseId: string,
     request: EgressFetchRequest,

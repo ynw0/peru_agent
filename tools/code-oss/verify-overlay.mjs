@@ -11,6 +11,10 @@ const allowedRoots = [
   "product.json",
   "src/vs/workbench/contrib/independentAiIde/",
   "src/vs/workbench/workbench.desktop.main.ts",
+  "src/vs/code/electron-main/independentAiIdeRuntimeChannel.ts",
+  "src/vs/code/electron-main/app.ts",
+  "build/gulpfile.vscode.win32.js",
+  "build/gulpfile.vscode.js",
 ];
 const allowedModes = new Set(["copy", "merge-json", "insert-before"]);
 const targets = [];
@@ -32,7 +36,7 @@ for (const entry of manifest.entries) {
 
   const sourcePath = resolve(projectRoot, entry.source);
   await stat(sourcePath);
-  targets.push(`${entry.mode}:${entry.target}`);
+  targets.push(`${entry.mode}:${entry.target}:${entry.anchor ?? ""}`);
 }
 
 if (new Set(targets).size !== targets.length) {

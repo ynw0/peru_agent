@@ -47,6 +47,38 @@
       "target": "src/vs/workbench/workbench.desktop.main.ts",
       "mode": "insert-before",
       "anchor": "// Logs\nimport 'vs/workbench/contrib/logs/electron-sandbox/logs.contribution';"
+    },
+    {
+      "source": "overlays/code-oss/src/vs/workbench/contrib/independentAiIde/browser/independentAiIdeRuntimeBridge.ts",
+      "target": "src/vs/workbench/contrib/independentAiIde/browser/independentAiIdeRuntimeBridge.ts",
+      "mode": "copy"
+    },
+    {
+      "source": "overlays/code-oss/src/vs/code/electron-main/independentAiIdeRuntimeChannel.ts",
+      "target": "src/vs/code/electron-main/independentAiIdeRuntimeChannel.ts",
+      "mode": "copy"
+    },
+    {
+      "source": "overlays/code-oss/src/vs/code/electron-main/app.independentAiIdeRuntime.import.txt",
+      "target": "src/vs/code/electron-main/app.ts",
+      "mode": "insert-before",
+      "anchor": "import { Promises, RunOnceScheduler, runWhenIdle } from 'vs/base/common/async';"
+    },
+    {
+      "source": "overlays/code-oss/src/vs/code/electron-main/app.independentAiIdeRuntime.register.txt",
+      "target": "src/vs/code/electron-main/app.ts",
+      "mode": "insert-before",
+      "anchor": "\t\t// Policies (main & shared process)"
+    },
+    {
+      "source": "overlays/code-oss/build/gulpfile.vscode.win32.js",
+      "target": "build/gulpfile.vscode.win32.js",
+      "mode": "copy"
+    },
+    {
+      "source": "overlays/code-oss/build/gulpfile.vscode.js",
+      "target": "build/gulpfile.vscode.js",
+      "mode": "copy"
     }
   ]
 }

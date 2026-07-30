@@ -1,7 +1,9 @@
 import type { CheckpointManager } from "../checkpoint/checkpoint-manager.js";
 import type { DiffManager } from "../diff/diff-manager.js";
+import type { DiffReviewCoordinator } from "../diff/diff-review-coordinator.js";
 import type { Tool } from "../tool-runtime.js";
 import type { WorkspaceRegistry } from "../workspace/workspace-service.js";
+import type { WorkspaceTargetResolver } from "../workspace/target-resolver.js";
 
 interface PathInput {
   readonly path: string;
@@ -30,6 +32,7 @@ interface ApplyPatchInput extends PathInput {
 interface GlobInput {
   readonly pattern: string;
   readonly maxResults: number;
+  readonly root?: string;
 }
 
 interface GrepInput {
@@ -37,6 +40,7 @@ interface GrepInput {
   readonly pattern: string;
   readonly caseSensitive: boolean;
   readonly maxResults: number;
+  readonly root?: string;
 }
 
 interface DiffInput {
@@ -105,11 +109,15 @@ function replaceText(content: string, oldText: string, newText: string, replaceA
 
 export interface WorkspaceToolDependencies {
   readonly workspaces: WorkspaceRegistry;
+  readonly targetResolver?: WorkspaceTargetResolver;
   readonly diffs: DiffManager;
   readonly checkpoints: CheckpointManager;
+  readonly diffReviews?: DiffReviewCoordinator;
 }
 
 export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): readonly Tool<unknown, unknown>[] {
+  const target = (context: { readonly sessionId: string; readonly workspaceId: string }, path: string) => dependencies.targetResolver?.resolve(context.sessionId, context.workspaceId, path)
+    ?? { workspaceId: context.workspaceId, relativePath: path, workspace: dependencies.workspaces.get(context.workspaceId) };
   const readTool: Tool<PathInput, object> = {
     manifest: {
       name: "Read",
@@ -131,7 +139,8 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
     },
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
     execute: async (input, context) => {
-      const snapshot = await dependencies.workspaces.get(context.workspaceId).readText(input.path);
+      const resolved = target(context, input.path);
+      const snapshot = await resolved.workspace.readText(resolved.relativePath);
       return {
         path: snapshot.path,
         content: snapshot.content,
@@ -165,12 +174,17 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
       };
     },
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
-    execute: async (input, context) => dependencies.diffs.propose({
-      sessionId: context.sessionId,
-      workspaceId: context.workspaceId,
-      toolCallId: context.toolCallId,
-      changes: [{ path: input.path, afterContent: input.content }],
-    }),
+    execute: async (input, context) => {
+      const resolved = target(context, input.path);
+      const proposal = await dependencies.diffs.propose({
+        sessionId: context.sessionId,
+        workspaceId: resolved.workspaceId,
+        toolCallId: context.toolCallId,
+        changes: [{ path: resolved.relativePath, afterContent: input.content }],
+      });
+      if (context.workspaceWriteMode === "isolatedAutoApply") return dependencies.diffs.accept(proposal.id);
+      return dependencies.diffReviews === undefined ? proposal : dependencies.diffReviews.awaitResolution(proposal.id, context.sessionId, context.signal);
+    },
     serializeOutput: output => JSON.stringify(output),
   };
 
@@ -205,14 +219,17 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
     },
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
     execute: async (input, context) => {
-      const current = await dependencies.workspaces.get(context.workspaceId).readText(input.path);
+      const resolved = target(context, input.path);
+      const current = await resolved.workspace.readText(resolved.relativePath);
       const afterContent = replaceText(current.content ?? "", input.oldText, input.newText, input.replaceAll);
-      return dependencies.diffs.propose({
+      const proposal = await dependencies.diffs.propose({
         sessionId: context.sessionId,
-        workspaceId: context.workspaceId,
+        workspaceId: resolved.workspaceId,
         toolCallId: context.toolCallId,
         changes: [{ path: current.path, afterContent }],
       });
+      if (context.workspaceWriteMode === "isolatedAutoApply") return dependencies.diffs.accept(proposal.id);
+      return dependencies.diffReviews === undefined ? proposal : dependencies.diffReviews.awaitResolution(proposal.id, context.sessionId, context.signal);
     },
     serializeOutput: output => JSON.stringify(output),
   };
@@ -264,17 +281,20 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
     },
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
     execute: async (input, context) => {
-      const current = await dependencies.workspaces.get(context.workspaceId).readText(input.path);
+      const resolved = target(context, input.path);
+      const current = await resolved.workspace.readText(resolved.relativePath);
       let afterContent = current.content ?? "";
       for (const edit of input.edits) {
         afterContent = replaceText(afterContent, edit.oldText, edit.newText, edit.replaceAll);
       }
-      return dependencies.diffs.propose({
+      const proposal = await dependencies.diffs.propose({
         sessionId: context.sessionId,
-        workspaceId: context.workspaceId,
+        workspaceId: resolved.workspaceId,
         toolCallId: context.toolCallId,
         changes: [{ path: current.path, afterContent }],
       });
+      if (context.workspaceWriteMode === "isolatedAutoApply") return dependencies.diffs.accept(proposal.id);
+      return dependencies.diffReviews === undefined ? proposal : dependencies.diffReviews.awaitResolution(proposal.id, context.sessionId, context.signal);
     },
     serializeOutput: output => JSON.stringify(output),
   };
@@ -289,6 +309,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
         properties: {
           pattern: { type: "string" },
           maxResults: { type: "number" },
+          root: { type: "string" },
         },
         required: ["pattern"],
         additionalProperties: false,
@@ -299,14 +320,16 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
     },
     validate(value) {
       const record = asRecord(value);
+      const root = record.root === undefined ? undefined : requireString(record, "root");
       return {
         pattern: requireString(record, "pattern"),
         maxResults: optionalPositiveInteger(record, "maxResults", 200, 10_000),
+        ...(root === undefined ? {} : { root }),
       };
     },
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }),
     execute: async (input, context) => ({
-      paths: await dependencies.workspaces.get(context.workspaceId).glob(input.pattern, input.maxResults),
+      paths: await (input.root === undefined ? dependencies.workspaces.get(context.workspaceId) : target(context, input.root).workspace).glob(input.pattern, input.maxResults),
     }),
     serializeOutput: output => JSON.stringify(output),
   };
@@ -323,6 +346,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
           pattern: { type: "string" },
           caseSensitive: { type: "boolean" },
           maxResults: { type: "number" },
+          root: { type: "string" },
         },
         required: ["query"],
         additionalProperties: false,
@@ -333,16 +357,18 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
     },
     validate(value) {
       const record = asRecord(value);
+      const root = record.root === undefined ? undefined : requireString(record, "root");
       return {
         query: requireString(record, "query"),
         pattern: typeof record.pattern === "string" ? record.pattern : "**/*",
         caseSensitive: optionalBoolean(record, "caseSensitive", false),
         maxResults: optionalPositiveInteger(record, "maxResults", 200, 10_000),
+        ...(root === undefined ? {} : { root }),
       };
     },
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }),
     execute: async (input, context) => ({
-      matches: await dependencies.workspaces.get(context.workspaceId).grep(
+      matches: await (input.root === undefined ? dependencies.workspaces.get(context.workspaceId) : target(context, input.root).workspace).grep(
         input.query,
         input.pattern,
         input.caseSensitive,

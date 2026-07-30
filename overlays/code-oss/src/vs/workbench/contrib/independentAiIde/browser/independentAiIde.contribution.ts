@@ -59,8 +59,9 @@ const agentContainer = registerContainer(
 	localize('independentAiIde.agent', 'AI Agent'),
 	agentIcon,
 	10,
-	ViewContainerLocation.Sidebar,
+	ViewContainerLocation.AuxiliaryBar,
 );
+
 const tasksContainer = registerContainer(
 	INDEPENDENT_AI_IDE_CONTAINER_IDS.tasks,
 	localize('independentAiIde.tasks', 'Tasks'),
@@ -195,3 +196,71 @@ registerInteractiveView(
 	'workbench.view.independentAiIde.release',
 	70,
 );
+
+import { Disposable } from 'vs/base/common/lifecycle';
+import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
+import { Extensions as WorkbenchExtensions, IWorkbenchContributionsRegistry } from 'vs/workbench/common/contributions';
+import { IPaneCompositePartService } from 'vs/workbench/services/panecomposite/browser/panecomposite';
+import { IWorkbenchLayoutService, Parts } from 'vs/workbench/services/layout/browser/layoutService';
+import { LifecyclePhase } from 'vs/workbench/services/lifecycle/common/lifecycle';
+import { installIndependentAiIdeWorkbenchBridge } from 'vs/workbench/contrib/independentAiIde/common/independentAiIdeWorkbenchBridge';
+import { IndependentAiIdeRuntimeBridge } from 'vs/workbench/contrib/independentAiIde/browser/independentAiIdeRuntimeBridge';
+
+class IndependentAiIdeRuntimeContribution extends Disposable {
+	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
+	) {
+		super();
+		try {
+			this._register(installIndependentAiIdeWorkbenchBridge(instantiationService.createInstance(IndependentAiIdeRuntimeBridge)));
+		} catch (error) {
+			console.error('[Independent AI IDE] Runtime bridge creation failed.', error);
+			return;
+		}
+	}
+}
+
+class IndependentAiIdeRightPanelContribution {
+	constructor(
+		@IPaneCompositePartService private readonly paneCompositePartService: IPaneCompositePartService,
+		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
+	) {
+		// The Auxiliary Bar DOM is created as part of layout restoration. Opening
+		// the composite before that point silently returns `undefined`, which left
+		// the Agent view registered but invisible on a fresh profile. Wait for the
+		// native workbench restore barrier, then make the part visible and open the
+		// registered native container.
+		void this.layoutService.whenRestored.then(async () => {
+			try {
+				this.layoutService.setPartHidden(false, Parts.AUXILIARYBAR_PART);
+				const panel = await this.paneCompositePartService.openPaneComposite(
+					INDEPENDENT_AI_IDE_CONTAINER_IDS.agent,
+					ViewContainerLocation.AuxiliaryBar,
+					false,
+				);
+				if (!panel) {
+					console.error('[Independent AI IDE] Agent panel was not registered in the Auxiliary Bar.');
+				}
+			} catch (error) {
+				console.error('[Independent AI IDE] Unable to open the Agent panel on the right.', error);
+			}
+		});
+	}
+}
+
+Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
+	.registerWorkbenchContribution(IndependentAiIdeRuntimeContribution, LifecyclePhase.Starting);
+Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
+	.registerWorkbenchContribution(IndependentAiIdeRightPanelContribution, LifecyclePhase.Restored);
+import { Extensions as ConfigurationExtensions, IConfigurationRegistry } from 'vs/platform/configuration/common/configurationRegistry';
+
+Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
+	id: 'independentAiIde',
+	title: localize('independentAiIde.configuration', 'Independent AI IDE'),
+	properties: {
+		'independentAiIde.model.baseUrl': { type: 'string', description: localize('independentAiIde.model.baseUrl', 'OpenAI-compatible model service base URL.') },
+		'independentAiIde.model.chatCompletionsPath': { type: 'string', description: localize('independentAiIde.model.chatCompletionsPath', 'Chat Completions API path, for example /v1/chat/completions.') },
+		'independentAiIde.model.name': { type: 'string', description: localize('independentAiIde.model.name', 'Model name.') },
+		'independentAiIde.model.apiKeyEnvironmentVariable': { type: 'string', description: localize('independentAiIde.model.apiKeyEnvironmentVariable', 'Environment variable containing the API key. The key itself is never saved in settings.') },
+	},
+});

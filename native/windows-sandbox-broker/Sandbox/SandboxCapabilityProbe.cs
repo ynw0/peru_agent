@@ -53,12 +53,26 @@ internal sealed class SandboxCapabilityProbe
     public string ResolvePowerShellExecutable()
     {
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        var candidate = Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe");
-        if (!File.Exists(candidate))
+        var candidates = new List<string>
         {
-            throw new BrokerException("POWERSHELL_7_NOT_FOUND", $"未找到 PowerShell 7：{candidate}");
+            Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe"),
+        };
+        var storeRoot = Path.Combine(programFiles, "WindowsApps");
+        try
+        {
+            candidates.AddRange(Directory.EnumerateDirectories(storeRoot, "Microsoft.PowerShell_*_x64__8wekyb3d8bbwe")
+                .OrderByDescending(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .Select(packageDirectory => Path.Combine(packageDirectory, "pwsh.exe")));
         }
-        return candidate;
+        catch (UnauthorizedAccessException)
+        {
+            // 无权枚举 WindowsApps 时，只接受传统 MSI 安装路径。
+        }
+        foreach (var candidate in candidates)
+        {
+            if (File.Exists(candidate)) return candidate;
+        }
+        throw new BrokerException("POWERSHELL_7_NOT_FOUND", $"未找到官方 PowerShell 7：{string.Join("; ", candidates)}");
     }
 
     private static bool CanParsePowerShellAst()

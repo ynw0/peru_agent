@@ -8,6 +8,7 @@ import {
   WorkspaceConflictError,
   type WorkspaceRegistry,
   sha256Text,
+  sha256Bytes,
 } from "../workspace/workspace-service.js";
 
 export type DiffProposalStatus = "proposed" | "accepted" | "rejected" | "conflict";
@@ -16,6 +17,7 @@ export interface ProposedFileChange {
   readonly path: string;
   readonly before: WorkspaceFileSnapshot;
   readonly afterContent: string;
+  readonly afterBytesBase64?: string;
   readonly afterSha256: string;
   readonly unifiedDiff: string;
 }
@@ -146,6 +148,42 @@ export class DiffManager {
     return structuredClone(proposal);
   }
 
+  public async proposeBinary(input: {
+    readonly sessionId: string;
+    readonly workspaceId: string;
+    readonly toolCallId: string;
+    readonly changes: readonly { readonly path: string; readonly afterBytes: Uint8Array }[];
+  }): Promise<DiffProposal> {
+    if (input.changes.length === 0) throw new Error("Diff Proposal 至少包含一个文件修改");
+    const workspace = this.workspaces.get(input.workspaceId);
+    const seen = new Set<string>();
+    const changes: ProposedFileChange[] = [];
+    for (const change of input.changes) {
+      const before = await workspace.readBytes(change.path);
+      if (seen.has(before.path)) throw new Error(`Diff Proposal 包含重复文件：${before.path}`);
+      seen.add(before.path);
+      const afterBytesBase64 = Buffer.from(change.afterBytes).toString("base64");
+      const afterSha256 = sha256Bytes(change.afterBytes);
+      if (before.exists && before.sha256 === afterSha256) throw new Error(`修改前后内容相同：${before.path}`);
+      changes.push({
+        path: before.path,
+        before,
+        afterContent: "",
+        afterBytesBase64,
+        afterSha256,
+        unifiedDiff: `--- a/${before.path}\n+++ b/${before.path}\n@@ binary file changed @@`,
+      });
+    }
+    const proposal: DiffProposal = {
+      id: this.ids.next("diff"), sessionId: input.sessionId, workspaceId: input.workspaceId,
+      toolCallId: input.toolCallId, createdAt: new Date().toISOString(), status: "proposed", changes,
+    };
+    this.proposals.set(proposal.id, proposal);
+    await this.store.save(proposal);
+    await this.publish({ type: "diff.proposed", sessionId: proposal.sessionId, proposalId: proposal.id, affectedFiles: changes.map(change => change.path) });
+    return structuredClone(proposal);
+  }
+
   public get(id: string): DiffProposal | undefined {
     const proposal = this.proposals.get(id);
     return proposal === undefined ? undefined : structuredClone(proposal);
@@ -201,17 +239,19 @@ export class DiffManager {
       const written: ProposedFileChange[] = [];
       try {
         for (const change of proposal.changes) {
-          await workspace.writeText({
-            path: change.path,
-            content: change.afterContent,
-            expectedSha256: change.before.sha256,
-          });
+          if (change.afterBytesBase64 !== undefined) {
+            await workspace.writeBytes({ path: change.path, bytes: Buffer.from(change.afterBytesBase64, "base64"), expectedSha256: change.before.sha256 });
+          } else {
+            await workspace.writeText({ path: change.path, content: change.afterContent, expectedSha256: change.before.sha256 });
+          }
           written.push(change);
         }
       } catch (error: unknown) {
         // 多文件提交中途失败时，使用原始快照回滚已经写入的文件，避免留下半次提交。
         for (const change of [...written].reverse()) {
-          if (change.before.exists && change.before.content !== null) {
+          if (change.before.exists && change.before.bytesBase64 !== undefined) {
+            await workspace.writeBytes({ path: change.path, bytes: Buffer.from(change.before.bytesBase64, "base64"), expectedSha256: change.afterSha256 });
+          } else if (change.before.exists && change.before.content !== null) {
             await workspace.writeText({
               path: change.path,
               content: change.before.content,
@@ -228,7 +268,7 @@ export class DiffManager {
         checkpoint.id,
         new Map(proposal.changes.map(change => [
           change.path,
-          { sha256: change.afterSha256, content: change.afterContent },
+          { sha256: change.afterSha256, content: change.afterContent, ...(change.afterBytesBase64 === undefined ? {} : { bytesBase64: change.afterBytesBase64 }) },
         ])),
       );
       const accepted: DiffProposal = {

@@ -5,6 +5,8 @@ export interface WorkspaceFileSnapshot {
   readonly content: string | null;
   readonly sha256: string | null;
   readonly byteLength: number;
+  /** Binary snapshot payload, present when the file was read through readBytes(). */
+  readonly bytesBase64?: string;
 }
 
 // 文本搜索结果包含相对路径、行号和该行内容。

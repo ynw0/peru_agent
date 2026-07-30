@@ -14,6 +14,7 @@ import type {
   ExecutePowerShellRequest,
   WindowsSandboxFeatures,
 } from "../src/sandbox/broker-protocol.js";
+import { WINDOWS_SANDBOX_BROKER_PROTOCOL_VERSION } from "../src/sandbox/broker-protocol.js";
 import { WorkspaceRegistry, WorkspaceService } from "../src/workspace/workspace-service.js";
 
 const FULL_FEATURES: WindowsSandboxFeatures = {
@@ -48,7 +49,7 @@ class ScriptedBrokerTransport implements SandboxBrokerTransport {
 
 function hello(features: Partial<Record<keyof WindowsSandboxFeatures, boolean>> = {}): object {
   return {
-    protocolVersion: 1,
+    protocolVersion: WINDOWS_SANDBOX_BROKER_PROTOCOL_VERSION,
     brokerVersion: "test",
     platform: "windows",
     architecture: "x64",

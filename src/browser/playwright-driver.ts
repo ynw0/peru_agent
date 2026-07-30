@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import type {
   BrowserActionResult,
   BrowserActionTarget,
@@ -24,17 +25,28 @@ interface PlaywrightSession {
   lastSnapshotId?: string;
 }
 
+export interface PlaywrightBrowserDriverOptions {
+  readonly executablePath: string;
+  readonly expectedSha256: string;
+}
+
 // Playwright 仅在运行时动态加载；缺少锁定依赖时明确失败，不降级到系统浏览器。
 export class PlaywrightBrowserDriver implements BrowserDriver {
   public readonly kind = "playwright-chromium";
   public readonly egressEnforcement = "broker-proxy" as const;
   private readonly sessions = new Map<string, PlaywrightSession>();
 
+  public constructor(private readonly options: PlaywrightBrowserDriverOptions) {
+    if (!/^[A-Za-z]:\\/.test(options.executablePath)) throw new Error("Chromium executablePath 必须是绝对 Windows 路径");
+    if (!/^[a-f0-9]{64}$/.test(options.expectedSha256)) throw new Error("Chromium SHA-256 无效");
+  }
+
   public async create(request: BrowserDriverCreateRequest, signal: AbortSignal): Promise<void> {
     const playwright = await import("playwright-core").catch((error: unknown) => {
       throw new Error(`Playwright Runtime 不可用：${error instanceof Error ? error.message : "加载失败"}`);
     });
     if (signal.aborted) throw new Error("浏览器创建已取消");
+    await this.verifyBundledChromium();
     const controller = new AbortController();
     const abortCreate = (): void => controller.abort();
     signal.addEventListener("abort", abortCreate, { once: true });
@@ -42,6 +54,7 @@ export class PlaywrightBrowserDriver implements BrowserDriver {
       const browser = await playwright.chromium.launch({
         headless: true,
         proxy: { server: request.proxyServerUrl },
+        executablePath: this.options.executablePath,
       });
       if (controller.signal.aborted) {
         await browser.close();
@@ -203,6 +216,19 @@ export class PlaywrightBrowserDriver implements BrowserDriver {
     const session = this.sessions.get(sessionId);
     if (session === undefined) throw new Error(`Playwright 会话不存在：${sessionId}`);
     return session;
+  }
+
+  private async verifyBundledChromium(): Promise<void> {
+    let bytes: Uint8Array;
+    try {
+      bytes = await readFile(this.options.executablePath);
+    } catch (error: unknown) {
+      throw new Error(`Bundled Chromium missing：${error instanceof Error ? error.message : "读取失败"}`);
+    }
+    const actual = createHash("sha256").update(bytes).digest("hex");
+    if (actual !== this.options.expectedSha256) {
+      throw new Error(`Bundled Chromium SHA-256 不匹配：${actual}`);
+    }
   }
 }
 

@@ -424,7 +424,8 @@ function isSubagentRole(value: unknown): boolean {
 
 function isSubagentTaskStatus(value: unknown): boolean {
   return value === "queued" || value === "running" || value === "completed"
-    || value === "failed" || value === "aborted" || value === "patchProposed" || value === "merged";
+    || value === "failed" || value === "aborted" || value === "patchProposed" || value === "merged"
+    || value === "gating" || value === "noChanges" || value === "patchRejected" || value === "interrupted" || value === "gateInterrupted";
 }
 
 function isPositiveInteger(value: unknown): boolean {
@@ -452,6 +453,9 @@ function hasSubagentTaskFields(value: Record<string, unknown>): boolean {
     && isStringArray(value.writablePaths)
     && isStringArray(value.allowedCapabilities)
     && isSubagentBudget(value.budget)
+    && (value.reviewPolicy === "none" || value.reviewPolicy === "reviewer" || value.reviewPolicy === "reviewerAndTester")
+    && (value.planId === undefined || isNonEmptyString(value.planId))
+    && (value.planStepId === undefined || isNonEmptyString(value.planStepId))
     && (value.targetTaskId === undefined || isNonEmptyString(value.targetTaskId));
 }
 
@@ -459,7 +463,7 @@ function isSubagentTaskRequest(value: unknown): boolean {
   return isRecord(value)
     && hasOnlyKeys(value, [
       "parentSessionId", "parentTaskId", "role", "instruction", "depth", "baseWorkspaceId",
-      "allowedPaths", "writablePaths", "allowedCapabilities", "budget", "targetTaskId",
+      "allowedPaths", "writablePaths", "allowedCapabilities", "budget", "reviewPolicy", "planId", "planStepId", "sourceCommitId", "repairOfTaskId", "targetTaskId",
     ])
     && hasSubagentTaskFields(value);
 }
@@ -501,16 +505,22 @@ function isSubagentTaskRecord(value: unknown): boolean {
     || !isSubagentTaskStatus(value.status)
     || !isNonEmptyString(value.createdAt)
     || !isNonEmptyString(value.updatedAt)
+    || !isNonEmptyString(value.attemptId)
+    || !isNonNegativeInteger(value.rejectionCount)
     || (value.worktree !== undefined && !isSubagentWorktree(value.worktree))
     || (value.result !== undefined && !isSubagentExecutionResult(value.result))
     || (value.patchProposalId !== undefined && !isNonEmptyString(value.patchProposalId))
+    || (value.outputCommitId !== undefined && !isNonEmptyString(value.outputCommitId))
+    || (value.sourceCommitId !== undefined && !isNonEmptyString(value.sourceCommitId))
+    || (value.repairOfTaskId !== undefined && !isNonEmptyString(value.repairOfTaskId))
+    || (value.gateTaskIds !== undefined && !isStringArray(value.gateTaskIds))
     || (value.error !== undefined && (!isRecord(value.error)
       || !isNonEmptyString(value.error.code)
       || !isNonEmptyString(value.error.message)))) {
     return false;
   }
 
-  if ((value.status === "completed" || value.status === "patchProposed" || value.status === "merged")
+  if ((value.status === "completed" || value.status === "patchProposed" || value.status === "merged" || value.status === "noChanges")
     && value.result === undefined) {
     return false;
   }
@@ -518,7 +528,7 @@ function isSubagentTaskRecord(value: unknown): boolean {
     && value.patchProposalId === undefined) {
     return false;
   }
-  if ((value.status === "failed" || value.status === "aborted") && value.error === undefined) {
+  if ((value.status === "failed" || value.status === "aborted" || value.status === "interrupted" || value.status === "gateInterrupted") && value.error === undefined) {
     return false;
   }
   if (value.role === "implementer" && (value.status === "completed" || value.status === "patchProposed")
@@ -561,7 +571,9 @@ function isAgentMessage(value: unknown): boolean {
     return false;
   }
   if (value.role === "user") {
-    return typeof value.content === "string";
+    return typeof value.content === "string"
+      && (value.displayContent === undefined || typeof value.displayContent === "string")
+      && (value.attachments === undefined || Array.isArray(value.attachments));
   }
   if (value.role === "assistant") {
     return typeof value.content === "string" && Array.isArray(value.toolCalls);
@@ -572,6 +584,9 @@ function isAgentMessage(value: unknown): boolean {
       && typeof value.content === "string"
       && typeof value.isError === "boolean";
   }
+  if (value.role === "summary") {
+    return typeof value.content === "string" && isNonEmptyString(value.compactedAt) && isNonNegativeInteger(value.sourceMessageCount);
+  }
   return false;
 }
 
@@ -581,7 +596,8 @@ function isWorkspaceFileSnapshot(value: unknown): boolean {
     && typeof value.exists === "boolean"
     && (value.content === null || typeof value.content === "string")
     && (value.sha256 === null || isSha256(value.sha256))
-    && isNonNegativeInteger(value.byteLength);
+    && isNonNegativeInteger(value.byteLength)
+    && (value.bytesBase64 === undefined || typeof value.bytesBase64 === "string");
 }
 
 function isDiffProposal(value: unknown): boolean {
@@ -598,6 +614,7 @@ function isDiffProposal(value: unknown): boolean {
       && isNonEmptyString(change.path)
       && isWorkspaceFileSnapshot(change.before)
       && typeof change.afterContent === "string"
+      && (change.afterBytesBase64 === undefined || typeof change.afterBytesBase64 === "string")
       && isSha256(change.afterSha256)
       && typeof change.unifiedDiff === "string")
     && (value.checkpointId === undefined || isNonEmptyString(value.checkpointId))
@@ -617,7 +634,8 @@ function isCheckpointRecord(value: unknown): boolean {
       && isNonEmptyString(file.path)
       && isWorkspaceFileSnapshot(file.before)
       && (file.expectedAfterSha256 === null || isSha256(file.expectedAfterSha256))
-      && (file.afterContent === null || typeof file.afterContent === "string"));
+      && (file.afterContent === null || typeof file.afterContent === "string")
+      && (file.afterBytesBase64 === undefined || file.afterBytesBase64 === null || typeof file.afterBytesBase64 === "string"));
 }
 
 function isPlanRecord(value: unknown): boolean {
@@ -685,6 +703,9 @@ function isWorkbenchSnapshot(value: unknown): boolean {
       && isToolRiskLevel(permission.riskLevel)
       && isStringArray(permission.capabilities)
       && isStringArray(permission.affectedFiles)
+      && (permission.networkTargets === undefined || isStringArray(permission.networkTargets))
+      && (permission.commands === undefined || isStringArray(permission.commands))
+      && (permission.commandText === undefined || typeof permission.commandText === "string")
       && isNonEmptyString(permission.reason))
     && Array.isArray(value.tools)
     && value.tools.every(tool => isRecord(tool)
@@ -721,6 +742,14 @@ function isWorkbenchSnapshot(value: unknown): boolean {
       && (task.workspaceId === undefined || isNonEmptyString(task.workspaceId))
       && (task.verdict === undefined || task.verdict === "approved" || task.verdict === "rejected")
       && (task.proposalId === undefined || isNonEmptyString(task.proposalId))
+      && (task.planId === undefined || isNonEmptyString(task.planId))
+      && (task.planStepId === undefined || isNonEmptyString(task.planStepId))
+      && (task.attemptId === undefined || isNonEmptyString(task.attemptId))
+      && (task.outputCommitId === undefined || isNonEmptyString(task.outputCommitId))
+      && (task.sourceCommitId === undefined || isNonEmptyString(task.sourceCommitId))
+      && (task.repairOfTaskId === undefined || isNonEmptyString(task.repairOfTaskId))
+      && (task.rejectionCount === undefined || isNonNegativeInteger(task.rejectionCount))
+      && (task.stableReason === undefined || isNonEmptyString(task.stableReason))
       && (task.error === undefined || (isRecord(task.error)
         && isNonEmptyString(task.error.code)
         && isNonEmptyString(task.error.message))))
@@ -742,6 +771,14 @@ function isAgentEvent(value: unknown): boolean {
   switch (value.type) {
     case "session.created":
       return value.workspaceId === undefined || typeof value.workspaceId === "string";
+    case "session.renamed":
+      return typeof value.title === "string";
+    case "session.compacted":
+      return isNonNegativeInteger(value.sourceMessageCount);
+    case "session.input.queued":
+      return isNonEmptyString(value.queueId) && (value.priority === "guide" || value.priority === "next" || value.priority === "immediate");
+    case "session.input.dequeued":
+      return isNonEmptyString(value.queueId);
     case "session.started":
       return isNonEmptyString(value.runId);
     case "user.message.added":
@@ -792,7 +829,8 @@ function isAgentEvent(value: unknown): boolean {
         && isToolRiskLevel(value.riskLevel)
         && isStringArray(value.affectedFiles)
         && isStringArray(value.networkTargets)
-        && isStringArray(value.commands);
+        && isStringArray(value.commands)
+        && (value.commandText === undefined || typeof value.commandText === "string");
     case "tool.started":
       return isNonEmptyString(value.toolName) && isNonEmptyString(value.toolCallId);
     case "tool.progress":
@@ -806,6 +844,9 @@ function isAgentEvent(value: unknown): boolean {
         && isToolRiskLevel(value.riskLevel)
         && isStringArray(value.capabilities)
         && isStringArray(value.affectedFiles)
+        && (value.networkTargets === undefined || isStringArray(value.networkTargets))
+        && (value.commands === undefined || isStringArray(value.commands))
+        && (value.commandText === undefined || typeof value.commandText === "string")
         && isNonEmptyString(value.reason);
     case "permission.resolved":
       return isNonEmptyString(value.requestId)
@@ -814,6 +855,12 @@ function isAgentEvent(value: unknown): boolean {
       return isNonEmptyString(value.toolName)
         && isNonEmptyString(value.toolCallId)
         && typeof value.success === "boolean";
+    case "tool.result":
+      return isNonEmptyString(value.toolName)
+        && isNonEmptyString(value.toolCallId)
+        && typeof value.outputPreview === "string"
+        && typeof value.truncated === "boolean"
+        && typeof value.isError === "boolean";
     case "diff.proposed":
       return isNonEmptyString(value.proposalId) && isStringArray(value.affectedFiles);
     case "diff.resolved":
@@ -828,18 +875,37 @@ function isAgentEvent(value: unknown): boolean {
       return isNonEmptyString(value.taskId)
         && (value.role === "planner" || value.role === "explorer" || value.role === "implementer"
           || value.role === "reviewer" || value.role === "tester")
-        && Number.isInteger(value.depth) && Number(value.depth) > 0;
+        && Number.isInteger(value.depth) && Number(value.depth) > 0
+        && (value.planId === undefined || isNonEmptyString(value.planId))
+        && (value.planStepId === undefined || isNonEmptyString(value.planStepId))
+        && (value.attemptId === undefined || isNonEmptyString(value.attemptId));
     case "subagent.task.started":
       return isNonEmptyString(value.taskId) && isNonEmptyString(value.workspaceId);
     case "subagent.task.completed":
       return isNonEmptyString(value.taskId)
         && (value.role === "planner" || value.role === "explorer" || value.role === "implementer"
           || value.role === "reviewer" || value.role === "tester")
-        && (value.verdict === undefined || value.verdict === "approved" || value.verdict === "rejected");
+        && (value.verdict === undefined || value.verdict === "approved" || value.verdict === "rejected")
+        && (value.outputCommitId === undefined || isNonEmptyString(value.outputCommitId))
+        && (value.stableReason === undefined || isNonEmptyString(value.stableReason));
     case "subagent.task.failed":
       return isNonEmptyString(value.taskId) && isNonEmptyString(value.code) && isNonEmptyString(value.message);
     case "subagent.task.aborted":
       return isNonEmptyString(value.taskId);
+    case "subagent.task.interrupted":
+      return isNonEmptyString(value.taskId)
+        && (value.status === "interrupted" || value.status === "gateInterrupted")
+        && isNonEmptyString(value.code) && isNonEmptyString(value.message);
+    case "subagent.task.status":
+      return isNonEmptyString(value.taskId)
+        && (value.status === "gating" || value.status === "noChanges" || value.status === "patchRejected")
+        && (value.gateTaskIds === undefined || isStringArray(value.gateTaskIds))
+        && (value.message === undefined || typeof value.message === "string");
+    case "subagent.gate.attempt":
+      return isNonEmptyString(value.taskId) && isNonEmptyString(value.targetTaskId)
+        && (value.role === "reviewer" || value.role === "tester")
+        && (value.status === "approved" || value.status === "rejected" || value.status === "failed" || value.status === "interrupted")
+        && (value.summary === undefined || typeof value.summary === "string");
     case "subagent.patch.proposed":
       return isNonEmptyString(value.taskId) && isNonEmptyString(value.proposalId)
         && isStringArray(value.gateTaskIds);

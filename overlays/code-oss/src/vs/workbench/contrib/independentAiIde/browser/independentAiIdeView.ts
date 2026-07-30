@@ -25,7 +25,7 @@ import { independentAiIdeLocalize, IndependentAiIdeMessageKey } from 'vs/workben
 export type IndependentAiIdeViewKind = 'agent' | 'tasks' | 'permissions' | 'browser' | 'computer' | 'evolution' | 'release';
 
 export class IndependentAiIdeView extends ViewPane {
-	private body: HTMLElement | undefined;
+	private viewBody: HTMLElement | undefined;
 	private bridge: IndependentAiIdeWorkbenchBridge | undefined;
 	private bridgeSubscription: { dispose(): void } | undefined;
 	private snapshotSubscription: { dispose(): void } | undefined;
@@ -63,8 +63,8 @@ export class IndependentAiIdeView extends ViewPane {
 
 	protected override renderBody(container: HTMLElement): void {
 		super.renderBody(container);
-		this.body = container;
-		this.render();
+		this.viewBody = container;
+		this.renderContents();
 	}
 
 	public override dispose(): void {
@@ -83,23 +83,23 @@ export class IndependentAiIdeView extends ViewPane {
 			this.snapshot = bridge.getSnapshot();
 			this.snapshotSubscription = bridge.onSnapshot(snapshot => {
 				this.snapshot = snapshot;
-				this.render();
+				this.renderContents();
 			});
 		}
-		this.render();
+		this.renderContents();
 	}
 
-	private render(): void {
-		if (this.body === undefined) {
+	private renderContents(): void {
+		if (this.viewBody === undefined) {
 			return;
 		}
-		this.body.textContent = '';
+		this.viewBody.textContent = '';
 		const root = createElement('div', 'independent-ai-ide-view');
 		root.style.padding = '12px';
 		root.style.display = 'flex';
 		root.style.flexDirection = 'column';
 		root.style.gap = '10px';
-		this.body.appendChild(root);
+		this.viewBody.appendChild(root);
 
 		if (this.bridge === undefined || this.snapshot === undefined) {
 			root.appendChild(createNotice(this.t('runtimeDisconnected')));
@@ -467,7 +467,7 @@ ${details}`);
 				this.errorMessage = error instanceof Error ? error.message : this.t('unknownError');
 			}).finally(() => {
 				button.disabled = false;
-				this.render();
+				this.renderContents();
 			});
 		});
 		return button;

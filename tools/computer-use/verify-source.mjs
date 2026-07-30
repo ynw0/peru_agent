@@ -1,7 +1,9 @@
 import { readFile, stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = resolve(new URL("../..", import.meta.url).pathname);
+const currentFile = fileURLToPath(import.meta.url);
+const root = resolve(dirname(currentFile), "../..");
 const requiredFiles = [
   "native/windows-ui-automation-broker/IndependentAiIde.WindowsUiAutomationBroker.csproj",
   "native/windows-ui-automation-broker/Program.cs",

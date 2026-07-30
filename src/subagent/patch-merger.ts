@@ -2,6 +2,7 @@ import type { DiffManager, DiffProposal } from "../diff/diff-manager.js";
 import type { WorkspaceRegistry } from "../workspace/workspace-service.js";
 import type { SnapshotWorktreeManager } from "./worktree-manager.js";
 import type { SubagentTaskRecord } from "./types.js";
+import type { SubagentCommit } from "./types.js";
 
 export class SubagentPatchMerger {
   public constructor(
@@ -10,11 +11,13 @@ export class SubagentPatchMerger {
     private readonly diffs: DiffManager,
   ) {}
 
-  public async propose(task: SubagentTaskRecord): Promise<DiffProposal> {
-    if (task.role !== "implementer" || task.status !== "completed" || task.worktree === undefined) {
+  public async propose(task: SubagentTaskRecord, immutableCommit?: SubagentCommit): Promise<DiffProposal> {
+    if (task.role !== "implementer" || (task.status !== "completed" && task.status !== "gating") || task.worktree === undefined) {
       throw new Error("只有已完成的 Implementer 任务可以提出 Patch 合并");
     }
-    const changes = await this.worktrees.collectPatch(task.worktree);
+    const changes = immutableCommit === undefined
+      ? await this.worktrees.collectPatch(task.worktree)
+      : immutableCommit.files.map(file => ({ path: file.path, before: file.before, afterContent: file.after.content ?? "" }));
     if (changes.length === 0) {
       throw new Error("子 Agent 没有产生可合并修改");
     }
