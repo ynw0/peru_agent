@@ -1,6 +1,9 @@
 node_modules/
 dist/
 coverage/
+.e2e-tmp/
+.tui-config-backup-*/
+**/obj/
 .env
 *.log
 .ai-ide/runtime/

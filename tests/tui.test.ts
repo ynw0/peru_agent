@@ -9,6 +9,7 @@ import { TuiApplicationLifecycle, type TuiLifecycleEvent, type TuiLifecycleHost 
 import { createTuiInputBuffer, reduceTuiInput } from "../src/tui/input-buffer.js";
 import { buildTuiTimeline, layoutTuiLines } from "../src/tui/terminal-layout.js";
 import { TuiTerminalInputDecoder } from "../src/tui/mouse.js";
+import { TuiInputRouter } from "../src/tui/input-router.js";
 import { CheckpointManager, InMemoryCheckpointStore } from "../src/checkpoint/checkpoint-manager.js";
 import { DiffManager } from "../src/diff/diff-manager.js";
 import { DiffReviewCoordinator } from "../src/diff/diff-review-coordinator.js";
@@ -169,7 +170,7 @@ test("TUI timeline preserves persisted message/tool order and folds tools to fou
   const timeline = buildTuiTimeline(session, snapshot);
   assert.deepEqual(timeline.map(item => item.id), ["u", "a1", "tool:t1", "a2"]);
   const layout = layoutTuiLines(timeline, 24);
-  assert.equal(layout.lines.filter(line => line.entryId === "tool:t1").length <= 4, true);
+  assert.equal(layout.lines.filter(line => line.entryId === "tool:t1" && line.spacer !== true).length <= 4, true);
   assert.equal(layout.lines.some(line => line.text.includes("中文.txt")), true);
 });
 
@@ -194,11 +195,21 @@ test("TUI terminal mouse decoder preserves split and coalesced SGR reports", () 
   assert.equal(first.length, 1);
   assert.equal(first[0]?.kind, "wheel");
   assert.equal(first[0]?.direction, "up");
-  const next = decoder.feed("[<65;4;6m\u001b[<2;4;6m");
+  const next = decoder.feed("[<65;4;6M\u001b[<2;4;6M");
   assert.equal(next.length, 2);
   assert.equal(next[0]?.kind, "wheel");
   assert.equal(next[1]?.kind, "press");
   assert.equal(next[1]?.button, "right");
+  const release = decoder.feed("[<0;4;6m");
+  assert.equal(release[0]?.kind, "release");
+});
+
+test("TUI input router consumes Ink mouse values and leaves text untouched", () => {
+  const events: string[] = [];
+  const router = new TuiInputRouter(event => events.push(event.kind));
+  assert.equal(router.feed("[<64;4;5M"), true);
+  assert.equal(router.feed("hello"), false);
+  assert.deepEqual(events, ["mouse"]);
 });
 
 test("TUI configuration editor exposes the full editable field sequence", () => {

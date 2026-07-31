@@ -82,10 +82,10 @@ export function parseTuiMouseInput(value: string): TuiMouseEvent | undefined {
       };
     }
     const button = buttonFromCode(code & 3);
-    const isMotion = (code & 32) !== 0;
     const isRelease = sgr[4] === "m";
+    const isMotion = (code & 32) !== 0;
     return {
-      kind: isMotion ? "move" : isRelease ? "release" : "press",
+      kind: isRelease ? "release" : isMotion ? "move" : "press",
       x,
       y,
       ...(button === undefined ? {} : { button }),

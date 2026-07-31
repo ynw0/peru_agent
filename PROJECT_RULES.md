@@ -78,6 +78,7 @@
 
 ## AI IDE 交互层规则
 
+- Ink TUI 的终端输入只能由 Ink `useInput` 读取；禁止同时给同一 stdin 添加 `data`/`readable` 消费者，鼠标 CSI 必须在文本 reducer 前统一路由。
 - 所有流式更新实体必须在第一个 delta 前生成并发布稳定 ID。
 - Workbench 投影必须按 `sessionId` 隔离，后台会话事件不得覆盖当前会话状态。
 - 用于审计、排序和恢复的领域时间戳必须写入事件，禁止在重放时重新生成。

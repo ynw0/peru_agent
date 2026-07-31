@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { dirname } from "node:path";
 import { lstat } from "node:fs/promises";
 import sliceAnsi from "slice-ansi";
-import { Box, Text, useApp, useInput, useStdin, useWindowSize } from "ink";
+import { Box, Text, useApp, useInput, useWindowSize } from "ink";
 import type { AgentSessionSnapshot, AgentQueuedInput } from "../agent/types.js";
 import type { TrashedSessionRecord } from "../storage/session-store.js";
 import type { CheckpointRecord } from "../checkpoint/checkpoint-manager.js";
@@ -35,7 +35,7 @@ import type { SubagentTaskRecord } from "../subagent/types.js";
 import type { SubagentCommit } from "../subagent/types.js";
 import { buildTuiConversationTurns, flattenTuiConversationTurns, getTuiInputWindow, layoutTuiLines, layoutTuiTextLines, type TuiRenderedLine } from "./terminal-layout.js";
 import { formatCollapsedInput } from "./user-input.js";
-import { isTuiMouseInputFragment, parseTuiMouseInput, type TuiMouseEvent } from "./mouse.js";
+import type { TuiMouseEvent } from "./mouse.js";
 import { TuiInputRouter } from "./input-router.js";
 import { TuiHitRegionRegistry } from "./hit-regions.js";
 import { TuiPlanEditor, TuiTaskEditor } from "./orchestration-editor.js";
@@ -86,7 +86,6 @@ interface NavigationKey {
 
 export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
   const { exit } = useApp();
-  const { stdin } = useStdin();
   const { columns, rows } = useWindowSize();
   const [state, setState] = useState<TuiControllerState>(controller.getState());
   const [input, setInput] = useState<TuiInputBufferState>(createTuiInputBuffer());
@@ -117,9 +116,14 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
   const timelineSelectionRef = useRef<TuiTextSelection | undefined>(undefined);
   const selectingTimelineRef = useRef(false);
   const mouseHandlerRef = useRef<(event: TuiMouseEvent) => void>(() => undefined);
-  const terminalInputRouterRef = useRef<TuiInputRouter | undefined>(undefined);
   const hitRegionRegistryRef = useRef(new TuiHitRegionRegistry());
   const clipboard = useMemo(() => new Osc52ClipboardWriter(), []);
+  const terminalInputRouter = useMemo(
+    () => new TuiInputRouter(event => {
+      if (event.kind === "mouse") mouseHandlerRef.current(event.event);
+    }),
+    [],
+  );
   const previousColumns = useRef(columns);
   const lastEscapeAt = useRef(0);
 
@@ -274,7 +278,7 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
         setTimelineSelection(nextSelection);
         return;
       }
-      if (mouse.kind === "release" && mouse.button === "left") {
+      if (mouse.kind === "release" && selectingTimelineRef.current) {
         timelineSelectionRef.current = nextSelection;
         selectingTimelineRef.current = false;
         setTimelineSelection(nextSelection);
@@ -300,21 +304,7 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
     }
   };
 
-  useEffect(() => {
-    const router = new TuiInputRouter(event => {
-      if (event.kind === "mouse") mouseHandlerRef.current(event.event);
-    });
-    terminalInputRouterRef.current = router;
-    const handleRawInput = (chunk: Buffer | string): void => {
-      router.feed(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
-    };
-    stdin.on("data", handleRawInput);
-    return () => {
-      stdin.removeListener("data", handleRawInput);
-      router.reset();
-      if (terminalInputRouterRef.current === router) terminalInputRouterRef.current = undefined;
-    };
-  }, [stdin]);
+  useEffect(() => () => terminalInputRouter.reset(), [terminalInputRouter]);
 
   useEffect(() => {
     const resized = previousColumns.current !== columns;
@@ -393,8 +383,8 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
 
   useInput((value, key) => {
     if (state.switching) return;
-    const mouse = parseTuiMouseInput(value);
-    if (mouse !== undefined || isTuiMouseInputFragment(value)) return;
+    // Ink 7 通过 readable 独占 stdin；useInput 是鼠标和键盘的唯一入口。
+    if (terminalInputRouter.feed(value)) return;
     if (overlay?.kind === "config" || overlay?.kind === "planEditor" || overlay?.kind === "taskEditor") return;
     if (overlay?.kind === "panel" && overlay.panel === "transcript" && transcriptSearchMode) {
       if (key.escape || (key.ctrl && value.toLocaleLowerCase() === "c")) {
