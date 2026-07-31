@@ -7,9 +7,7 @@ import { checkTuiHealth, loadTuiSetupDraft, writeTuiConfiguration } from "../src
 import { TuiController } from "../src/tui/controller.js";
 import { TuiApplicationLifecycle, type TuiLifecycleEvent, type TuiLifecycleHost } from "../src/tui/lifecycle.js";
 import { createTuiInputBuffer, reduceTuiInput } from "../src/tui/input-buffer.js";
-import { buildTuiTimeline, layoutTuiLines } from "../src/tui/terminal-layout.js";
-import { TuiTerminalInputDecoder } from "../src/tui/mouse.js";
-import { TuiInputRouter } from "../src/tui/input-router.js";
+import { buildTuiTimeline, layoutTuiLines, type TuiConversationTurn } from "../src/tui/terminal-layout.js";
 import { CheckpointManager, InMemoryCheckpointStore } from "../src/checkpoint/checkpoint-manager.js";
 import { DiffManager } from "../src/diff/diff-manager.js";
 import { DiffReviewCoordinator } from "../src/diff/diff-review-coordinator.js";
@@ -28,6 +26,7 @@ import {
   TUI_CONFIGURATION_FIELDS,
 } from "../src/tui/view-state.js";
 import { createTuiViewport, getTuiViewportRange, reduceTuiViewport } from "../src/tui/view-state.js";
+import { createTuiStaticHistoryState, reconcileTuiStaticHistory, splitTuiTurnsForNativeTerminal } from "../src/tui/native-terminal-history.js";
 
 test("TUI slash command parser handles workspace and mode commands", () => {
   assert.deepEqual(parseTuiCommand("/mode autoReview"), { kind: "mode", mode: "autoReview" });
@@ -188,28 +187,60 @@ test("TUI viewport pages, follows new output and preserves the browsed item", ()
   assert.deepEqual(getTuiViewportRange(head), { start: 0, end: 10 });
 });
 
-test("TUI terminal mouse decoder preserves split and coalesced SGR reports", () => {
-  const decoder = new TuiTerminalInputDecoder();
-  assert.deepEqual(decoder.feed("\u001b[<64;4;5"), []);
-  const first = decoder.feed("M");
-  assert.equal(first.length, 1);
-  assert.equal(first[0]?.kind, "wheel");
-  assert.equal(first[0]?.direction, "up");
-  const next = decoder.feed("[<65;4;6M\u001b[<2;4;6M");
-  assert.equal(next.length, 2);
-  assert.equal(next[0]?.kind, "wheel");
-  assert.equal(next[1]?.kind, "press");
-  assert.equal(next[1]?.button, "right");
-  const release = decoder.feed("[<0;4;6m");
-  assert.equal(release[0]?.kind, "release");
+test("TUI native terminal history keeps only the active run dynamic", () => {
+  const turns: readonly TuiConversationTurn[] = [conversationTurn("old"), conversationTurn("live")];
+  const running = {
+    ...EMPTY_WORKBENCH_SNAPSHOT,
+    activeRunId: "run-live",
+    sessionStatus: "running" as const,
+    chatMessages: [{ id: "live", runId: "run-live", role: "user" as const, content: "live", state: "completed" as const }],
+  };
+  const split = splitTuiTurnsForNativeTerminal(turns, running);
+  assert.deepEqual(split.completedTurns.map(turn => turn.id), ["old"]);
+  assert.deepEqual(split.liveTurns.map(turn => turn.id), ["live"]);
+
+  const { activeRunId: _activeRunId, ...withoutActiveRun } = running;
+  const completed = splitTuiTurnsForNativeTerminal(turns, { ...withoutActiveRun, sessionStatus: "completed" });
+  assert.deepEqual(completed.completedTurns.map(turn => turn.id), ["old", "live"]);
+  assert.deepEqual(completed.liveTurns, []);
 });
 
-test("TUI input router consumes Ink mouse values and leaves text untouched", () => {
-  const events: string[] = [];
-  const router = new TuiInputRouter(event => events.push(event.kind));
-  assert.equal(router.feed("[<64;4;5M"), true);
-  assert.equal(router.feed("hello"), false);
-  assert.deepEqual(events, ["mouse"]);
+test("TUI Static history appends once and opens a new boundary for rewritten history", () => {
+  const oldTurn = conversationTurn("old");
+  const nextTurn = conversationTurn("next");
+  const initial = createTuiStaticHistoryState("session-1", "会话一", [oldTurn], 40, false);
+  const unchanged = reconcileTuiStaticHistory(initial, "session-1", "会话一", [oldTurn], 80, true);
+  assert.equal(unchanged, initial);
+
+  const appended = reconcileTuiStaticHistory(unchanged, "session-1", "会话一", [oldTurn, nextTurn], 80, false);
+  assert.equal(appended.generation, initial.generation);
+  assert.deepEqual(appended.turnIds, ["old", "next"]);
+  assert.equal(appended.items.length, initial.items.length + 1);
+  assert.equal(appended.items[0], initial.items[0]);
+  assert.equal(appended.items[1], initial.items[1]);
+
+  const rewritten = reconcileTuiStaticHistory(appended, "session-1", "会话一", [conversationTurn("compact")], 80, false);
+  assert.equal(rewritten.generation, appended.generation + 1);
+  assert.deepEqual(rewritten.turnIds, ["compact"]);
+  assert.equal(rewritten.items[0]?.kind, "session");
+
+  const switched = reconcileTuiStaticHistory(rewritten, "session-2", "会话二", [], 80, false);
+  assert.equal(switched.generation, rewritten.generation + 1);
+  assert.equal(switched.sessionId, "session-2");
+  assert.equal(switched.items[0]?.label, "会话二");
+});
+
+test("TUI launchers use the primary terminal buffer and lifecycle never enables mouse tracking", async () => {
+  const [main, setup, lifecycle] = await Promise.all([
+    readFile(join(process.cwd(), "src/tui/main.tsx"), "utf8"),
+    readFile(join(process.cwd(), "src/tui/setup.tsx"), "utf8"),
+    readFile(join(process.cwd(), "src/tui/lifecycle.ts"), "utf8"),
+  ]);
+  assert.match(main, /alternateScreen:\s*false/);
+  assert.doesNotMatch(main, /alternateScreen:\s*true/);
+  assert.match(setup, /alternateScreen:\s*false/);
+  assert.doesNotMatch(setup, /alternateScreen:\s*true/);
+  assert.doesNotMatch(lifecycle, /1000[hl]|1002[hl]|1006[hl]/);
 });
 
 test("TUI configuration editor exposes the full editable field sequence", () => {
@@ -365,6 +396,14 @@ class FakeLifecycleHost implements TuiLifecycleHost {
   public listenerCount(event: TuiLifecycleEvent): number {
     return this.listeners.get(event)?.size ?? 0;
   }
+}
+
+function conversationTurn(id: string): TuiConversationTurn {
+  return {
+    id,
+    user: { id, kind: "message", role: "user", label: "你", content: `问题 ${id}` },
+    agent: { text: `回答 ${id}`, toolSummaries: [], toolEntries: [] },
+  };
 }
 
 function fakeConfiguration(): TuiConfiguration {

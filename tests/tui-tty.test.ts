@@ -7,7 +7,6 @@ import { TuiConfigurationEditor } from "../src/tui/setup.js";
 import { createTuiInputBuffer, reduceTuiInput } from "../src/tui/input-buffer.js";
 import { createTuiConfigurationEditor } from "../src/tui/view-state.js";
 import type { TuiSetupDraft } from "../src/tui/config.js";
-import { TuiInputRouter } from "../src/tui/input-router.js";
 
 class MockStdin extends PassThrough {
   public isTTY = true;
@@ -18,6 +17,11 @@ class MockStdin extends PassThrough {
 
 class MockStdout extends PassThrough {
   public isTTY = true;
+  public output = "";
+  public constructor() {
+    super();
+    this.on("data", chunk => { this.output += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk); });
+  }
   public columns = 100;
   public rows = 30;
   public getColorDepth(): number { return 1; }
@@ -39,7 +43,7 @@ async function send(stdin: MockStdin, application: ReturnType<typeof render>, va
 }
 
 function outputOf(stdout: MockStdout): string {
-  return stdout.read()?.toString("utf8") ?? "";
+  return stdout.output;
 }
 
 const draft: TuiSetupDraft = {
@@ -73,10 +77,10 @@ test("Mock TTY decodes Ink arrows and edits the real configuration editor", asyn
   await send(stdin, application, "\u001b[3~"); // Delete
   await send(stdin, application, "/edited");
   await send(stdin, application, "\u001b[F"); // End
+  application.unmount();
   const rendered = outputOf(stdout);
   assert.match(rendered, /Chat Completions/);
   assert.match(rendered, /Chat Completions 路径：X/);
-  application.unmount();
 });
 
 function InputHarness(): React.ReactElement {
@@ -100,47 +104,9 @@ test("Mock TTY input harness remains live and accepts a paste payload", async ()
   });
   await flush(application);
   await send(stdin, application, "hello world");
+  application.unmount();
   const rendered = outputOf(stdout);
   assert.match(rendered, /\|0|hello world/);
-  application.unmount();
-});
-
-function MouseInputHarness({ onMouse }: { readonly onMouse: (event: string) => void }): React.ReactElement {
-  const router = React.useMemo(
-    () => new TuiInputRouter(event => {
-      if (event.kind !== "mouse") return;
-      const mouse = event.event;
-      onMouse(mouse.kind === "wheel"
-        ? `wheel:${mouse.direction}`
-        : `${mouse.kind}:${mouse.button ?? "none"}`);
-    }),
-    [onMouse],
-  );
-  React.useEffect(() => () => router.reset(), [router]);
-  useInput(value => {
-    router.feed(value);
-  });
-  return React.createElement(Text, null, "ready");
-}
-
-test("Mock TTY routes SGR mouse reports through Ink useInput", async () => {
-  const stdin = new MockStdin();
-  const stdout = new MockStdout();
-  const events: string[] = [];
-  const application = render(React.createElement(MouseInputHarness, {
-    onMouse: event => events.push(event),
-  }), {
-    stdin: stdin as unknown as NodeJS.ReadStream,
-    stdout: stdout as unknown as NodeJS.WriteStream,
-    stderr: new MockStdout() as unknown as NodeJS.WriteStream,
-    alternateScreen: false,
-    exitOnCtrlC: false,
-    patchConsole: false,
-  });
-  await flush(application);
-  await send(stdin, application, "\u001b[<64;10;10M\u001b[<0;10;10M\u001b[<0;12;10m");
-  assert.deepEqual(events, ["wheel:up", "press:left", "release:left"]);
-  application.unmount();
 });
 
 test("configuration editor state remains valid after terminal resize", async () => {

@@ -41,4 +41,4 @@ export function parseTuiCommand(input: string): TuiCommand | undefined {
   }
 }
 
-export const TUI_HELP = TUI_COMMANDS.map(item => `/${item.name.padEnd(12, " ")} ${item.description}`).join("\n") + "\n输入：Enter 发送；Shift+Enter/Alt+Enter 换行；Tab 补全；Ctrl+R 历史；Ctrl+O Verbose；滚轮/PageUp/PageDown 按终端行滚动；Ctrl+C 取消运行";
+export const TUI_HELP = TUI_COMMANDS.map(item => `/${item.name.padEnd(12, " ")} ${item.description}`).join("\n") + "\n输入：Enter 发送；Shift+Enter/Alt+Enter 换行；Tab 补全；Ctrl+R 历史；Ctrl+O Verbose；鼠标滚轮浏览终端历史；左键拖选后 Ctrl+Shift+C 复制；PageUp/PageDown 浏览当前应用视图；Ctrl+C 取消运行";

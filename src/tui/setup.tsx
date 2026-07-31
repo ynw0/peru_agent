@@ -18,7 +18,6 @@ import {
   type TuiConfigurationEditorState,
 } from "./view-state.js";
 import { getTuiInputWindow } from "./terminal-layout.js";
-import { parseTuiMouseInput } from "./mouse.js";
 
 export interface TuiConfigurationEditorProps {
   readonly initialDraft: TuiSetupDraft;
@@ -51,7 +50,7 @@ export async function runTuiSetupWizard(
         onSubmit={onSubmit}
         onCancel={onCancel}
       />,
-      { alternateScreen: true, exitOnCtrlC: false },
+      { alternateScreen: false, exitOnCtrlC: false },
     );
   });
 }
@@ -73,7 +72,6 @@ export function TuiConfigurationEditor({
   }, [columns]);
 
   useInput((value, key) => {
-    if (parseTuiMouseInput(value) !== undefined) return;
     if (state.busy) return;
     const transition = reduceTuiConfigurationEditor(state, value, key);
     if (transition.cancelled === true) {

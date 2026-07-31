@@ -20,22 +20,19 @@ export interface TuiApplicationLifecycleOptions {
   readonly host?: TuiLifecycleHost;
   readonly writeError?: (message: string) => void;
   readonly setExitCode?: (code: number) => void;
-  readonly stdout?: { readonly isTTY?: boolean; write(value: string): unknown };
 }
 
 /**
- * TUI 的唯一生命周期边界。Renderer 可以替换，但 shutdown 永远释放
- * Controller 当前持有的 Runtime，因此工作区/配置切换后不会清理旧实例。
+ * TUI 的唯一生命周期边界。终端模式由终端自身管理；这里仅负责释放
+ * Controller 当前持有的 Runtime、卸载 Renderer 和处理进程退出信号。
  */
 export class TuiApplicationLifecycle {
   private readonly host: TuiLifecycleHost;
   private readonly writeError: (message: string) => void;
   private readonly setExitCode: (code: number) => void;
-  private readonly stdout: { readonly isTTY?: boolean; write(value: string): unknown };
   private renderer: TuiApplicationRenderer | undefined;
   private shutdownPromise: Promise<void> | undefined;
   private installed = false;
-  private mouseTrackingEnabled = false;
 
   public constructor(
     private readonly controller: TuiController,
@@ -44,7 +41,6 @@ export class TuiApplicationLifecycle {
     this.host = options.host ?? (process as unknown as TuiLifecycleHost);
     this.writeError = options.writeError ?? (message => process.stderr.write(`${message}\n`));
     this.setExitCode = options.setExitCode ?? (code => { process.exitCode = code; });
-    this.stdout = options.stdout ?? process.stdout;
   }
 
   public setRenderer(renderer: TuiApplicationRenderer | undefined): void {
@@ -54,7 +50,6 @@ export class TuiApplicationLifecycle {
   public install(): void {
     if (this.installed) return;
     this.installed = true;
-    this.enableMouseTracking();
     this.host.once("SIGINT", this.onSignal);
     this.host.once("SIGTERM", this.onSignal);
     this.host.once("uncaughtException", this.onUnhandledError);
@@ -64,7 +59,6 @@ export class TuiApplicationLifecycle {
   public uninstall(): void {
     if (!this.installed) return;
     this.installed = false;
-    this.disableMouseTracking();
     this.host.removeListener("SIGINT", this.onSignal);
     this.host.removeListener("SIGTERM", this.onSignal);
     this.host.removeListener("uncaughtException", this.onUnhandledError);
@@ -80,9 +74,7 @@ export class TuiApplicationLifecycle {
       } catch (disposeError: unknown) {
         failure ??= disposeError;
       } finally {
-        // 即使 Runtime 清理失败，也必须退出 alternate screen。
         this.renderer?.unmount();
-        this.disableMouseTracking();
       }
       if (failure !== undefined) {
         this.setExitCode(1);
@@ -99,19 +91,4 @@ export class TuiApplicationLifecycle {
   private readonly onUnhandledError = (error?: unknown): void => {
     void this.shutdown(error);
   };
-
-  private enableMouseTracking(): void {
-    if (this.mouseTrackingEnabled || this.stdout.isTTY !== true) return;
-    this.mouseTrackingEnabled = true;
-    // 1000 reports button presses, 1002 adds drag motion and 1006 uses
-    // unambiguous SGR coordinates. Keep the modes paired so terminal state is
-    // restored even when shutdown follows an exception.
-    this.stdout.write("\u001b[?1000h\u001b[?1002h\u001b[?1006h");
-  }
-
-  private disableMouseTracking(): void {
-    if (!this.mouseTrackingEnabled) return;
-    this.mouseTrackingEnabled = false;
-    this.stdout.write("\u001b[?1006l\u001b[?1002l\u001b[?1000l");
-  }
 }
