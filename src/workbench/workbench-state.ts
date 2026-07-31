@@ -9,6 +9,8 @@ import type { AgentSessionStatus } from "../agent/types.js";
 
 export interface ChatMessageView {
   readonly id: string;
+  /** Run that produced this projection. Persisted Session messages remain the source of truth. */
+  readonly runId: string;
   readonly role: "user" | "assistant";
   readonly content: string;
   readonly state: "streaming" | "completed";
@@ -172,7 +174,13 @@ export function projectWorkbenchSnapshot(
         ...current,
         chatMessages: [
           ...current.chatMessages,
-          { id: event.messageId, role: "user", content: event.content, state: "completed" },
+          {
+            id: event.messageId,
+            runId: current.activeRunId ?? "unknown",
+            role: "user",
+            content: event.content,
+            state: "completed",
+          },
         ],
       };
     case "plan.created":
@@ -218,7 +226,13 @@ export function projectWorkbenchSnapshot(
         ...current,
         chatMessages: [
           ...current.chatMessages,
-          { id: event.messageId, role: "assistant", content: "", state: "streaming" },
+          {
+            id: event.messageId,
+            runId: current.activeRunId ?? "unknown",
+            role: "assistant",
+            content: "",
+            state: "streaming",
+          },
         ],
       };
     case "assistant.delta":
@@ -572,6 +586,14 @@ function mergeStrings(left: readonly string[], right: readonly string[]): readon
 }
 
 function withoutActiveRun(snapshot: WorkbenchSnapshot): WorkbenchSnapshot {
+  const runId = snapshot.activeRunId;
   const { activeRunId: _activeRunId, ...rest } = snapshot;
-  return rest;
+  if (runId === undefined) return rest;
+  // An assistant that never reached SessionStore is an in-flight projection,
+  // not historical conversation. Remove it when the run reaches a terminal
+  // state so it cannot be appended to a later turn.
+  return {
+    ...rest,
+    chatMessages: rest.chatMessages.filter(message => message.runId !== runId || message.state !== "streaming"),
+  };
 }

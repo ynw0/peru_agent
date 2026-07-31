@@ -8,6 +8,7 @@ import { TuiController } from "../src/tui/controller.js";
 import { TuiApplicationLifecycle, type TuiLifecycleEvent, type TuiLifecycleHost } from "../src/tui/lifecycle.js";
 import { createTuiInputBuffer, reduceTuiInput } from "../src/tui/input-buffer.js";
 import { buildTuiTimeline, layoutTuiLines } from "../src/tui/terminal-layout.js";
+import { TuiTerminalInputDecoder } from "../src/tui/mouse.js";
 import { CheckpointManager, InMemoryCheckpointStore } from "../src/checkpoint/checkpoint-manager.js";
 import { DiffManager } from "../src/diff/diff-manager.js";
 import { DiffReviewCoordinator } from "../src/diff/diff-review-coordinator.js";
@@ -157,9 +158,9 @@ test("TUI timeline preserves persisted message/tool order and folds tools to fou
     ],
   };
   const snapshot = { ...EMPTY_WORKBENCH_SNAPSHOT, chatMessages: [
-    { id: "u", role: "user" as const, content: "读取文件", state: "completed" as const },
-    { id: "a1", role: "assistant" as const, content: "我来读取", state: "completed" as const },
-    { id: "a2", role: "assistant" as const, content: "读取完成", state: "completed" as const },
+    { id: "u", runId: "run", role: "user" as const, content: "读取文件", state: "completed" as const },
+    { id: "a1", runId: "run", role: "assistant" as const, content: "我来读取", state: "completed" as const },
+    { id: "a2", runId: "run", role: "assistant" as const, content: "读取完成", state: "completed" as const },
   ], tools: [{
     toolCallId: "t1", toolName: "Read", description: "读取文件", riskLevel: "workspace-read" as const,
     capabilities: ["workspace.read" as const], affectedFiles: ["中文.txt"], networkTargets: [], commands: [],
@@ -184,6 +185,20 @@ test("TUI viewport pages, follows new output and preserves the browsed item", ()
   assert.equal(tail.unread, 0);
   const head = reduceTuiViewport(tail, { ctrl: true, home: true }, 42, 10);
   assert.deepEqual(getTuiViewportRange(head), { start: 0, end: 10 });
+});
+
+test("TUI terminal mouse decoder preserves split and coalesced SGR reports", () => {
+  const decoder = new TuiTerminalInputDecoder();
+  assert.deepEqual(decoder.feed("\u001b[<64;4;5"), []);
+  const first = decoder.feed("M");
+  assert.equal(first.length, 1);
+  assert.equal(first[0]?.kind, "wheel");
+  assert.equal(first[0]?.direction, "up");
+  const next = decoder.feed("[<65;4;6m\u001b[<2;4;6m");
+  assert.equal(next.length, 2);
+  assert.equal(next[0]?.kind, "wheel");
+  assert.equal(next[1]?.kind, "press");
+  assert.equal(next[1]?.button, "right");
 });
 
 test("TUI configuration editor exposes the full editable field sequence", () => {
@@ -378,6 +393,10 @@ function fakeRuntime(workspaceId: string, workspaceRoot: string, dispose: () => 
     onSnapshot: () => ({ dispose: () => undefined }),
     getActiveSessionId: () => session.id,
     getActiveSession: async () => session,
+    trashSession: async () => ({ snapshot: session, deletedAt: "2026-01-01T00:00:00.000Z" }),
+    listTrash: async () => [],
+    restoreTrash: async () => session,
+    deleteTrash: async () => false,
     sendInput: async () => ({ runId: "run" }),
     prepareUserInput: async content => ({ content }),
     getExternalPathCandidates: () => [],
@@ -410,6 +429,7 @@ function fakeRuntime(workspaceId: string, workspaceRoot: string, dispose: () => 
     getContextReport: async () => ({ contextWindowTokens: 131072, recentInputTokens: 0, usedPercent: 0, remainingTokens: 131072 }),
     listTools: () => [],
     getSession: async () => session,
+    listTranscriptEntries: async () => [],
     dispose: async () => dispose(),
   };
 }

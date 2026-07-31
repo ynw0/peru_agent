@@ -13,9 +13,14 @@ import type { AgentRunLimits, AgentRunOptions, AgentSessionSnapshot, AgentUserIn
 
 export interface AgentLoopOptions {
   readonly systemPrompt: string;
+  readonly systemContextProvider?: AgentSystemContextProvider;
   readonly maxOutputTokensPerTurn: number;
   readonly limits: AgentRunLimits;
   readonly contextWindowTokens?: number;
+}
+
+export interface AgentSystemContextProvider {
+  getContext(session: AgentSessionSnapshot): string | Promise<string>;
 }
 
 export interface AgentLoopDependencies {
@@ -269,8 +274,12 @@ export class AgentLoop {
       { type: "response.completed" }
     > | undefined;
 
+    const dynamicContext = await this.options.systemContextProvider?.getContext(session.snapshot()) ?? "";
+    const systemPrompt = dynamicContext.trim() === ""
+      ? this.options.systemPrompt
+      : `${this.options.systemPrompt}\n\n${dynamicContext.trim()}`;
     for await (const event of this.dependencies.provider.stream({
-      systemPrompt: this.options.systemPrompt,
+      systemPrompt,
       messages: session.getMessages(),
       tools: this.dependencies.tools.listModelDefinitions(manifest =>
         this.isToolVisible(manifest, runOptions) && this.isToolAllowed(manifest.name, runOptions) && this.isManifestAllowed(manifest.capabilities, runOptions)),

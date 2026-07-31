@@ -45,6 +45,7 @@ export function createAgentCoreComposition(dataDirectory: string): AgentCoreComp
     new JsonCheckpointStore(join(dataDirectory, "checkpoints")),
     ids,
     workspaces,
+    sessions,
   );
   const diffs = new DiffManager(
     workspaces,

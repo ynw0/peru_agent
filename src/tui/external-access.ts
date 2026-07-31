@@ -62,6 +62,18 @@ export class ExternalAccessCoordinator implements WorkspaceExternalResolver {
     return this.list(sessionId).map(grant => grant.directory);
   }
 
+  public getModelContext(sessionId: string): string {
+    const grants = this.list(sessionId);
+    if (grants.length === 0) {
+      return "当前 Session 没有已授权的外部目录；绝对路径必须先请求用户授权。";
+    }
+    return [
+      "当前 Session 的外部目录授权（由 PermissionCoordinator 和 WorkspaceTargetResolver 强制执行）：",
+      ...grants.map(grant => `- ${grant.directory}（挂载 ID：${grant.id}）`),
+      "这些目录可使用 Read、Glob、Grep 及文档 Tool 读取；Glob/Grep 可将目录绝对路径作为 root。不要因为目录位于主工作区外而拒绝，也不要访问未列出的路径。所有写入仍必须提出 Diff 并等待用户审核。",
+    ].join("\n");
+  }
+
   public revokeSession(sessionId: string): void {
     for (const [key, grant] of this.grants) {
       if (grant.sessionId !== sessionId) continue;
@@ -83,7 +95,7 @@ export function findExternalPathCandidates(value: string, workspaceRoot: string)
   }
   const paths = [
     ...value.matchAll(/["']((?:[A-Za-z]:[\\/]|\\\\)[^"']+)["']/g),
-    ...value.matchAll(/(?:^|\s)((?:[A-Za-z]:[\\/]|\\\\)[^\s"']+)/g),
+    ...value.matchAll(/(?:^|\s|@)((?:[A-Za-z]:[\\/]|\\\\)[^\s"']+)/g),
   ];
   for (const match of paths) {
     const candidate = match[1];

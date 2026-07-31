@@ -122,7 +122,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
     manifest: {
       name: "Read",
       version: "1.0.0",
-      description: "读取工作区内的 UTF-8 文本文件并返回内容和 SHA-256",
+      description: "读取当前工作区或当前 Session 已授权外部目录中的 UTF-8 文本文件，并返回内容和 SHA-256",
       inputSchema: {
         type: "object",
         properties: { path: { type: "string" } },
@@ -303,7 +303,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
     manifest: {
       name: "Glob",
       version: "1.0.0",
-      description: "按 Glob 模式列出工作区文件",
+      description: "按 Glob 模式列出当前工作区或已授权外部目录中的文件；root 可使用已授权绝对目录",
       inputSchema: {
         type: "object",
         properties: {
@@ -338,7 +338,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
     manifest: {
       name: "Grep",
       version: "1.0.0",
-      description: "在工作区 UTF-8 文本文件中搜索字符串",
+      description: "在当前工作区或已授权外部目录的 UTF-8 文本文件中搜索字符串；root 可使用已授权绝对目录",
       inputSchema: {
         type: "object",
         properties: {

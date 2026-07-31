@@ -681,6 +681,7 @@ function isWorkbenchSnapshot(value: unknown): boolean {
     && Array.isArray(value.chatMessages)
     && value.chatMessages.every(message => isRecord(message)
       && isNonEmptyString(message.id)
+      && isNonEmptyString(message.runId)
       && (message.role === "user" || message.role === "assistant")
       && typeof message.content === "string"
       && (message.state === "streaming" || message.state === "completed"))

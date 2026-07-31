@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { AgentSessionSnapshot } from "../agent/types.js";
+import type { TrashedSessionRecord } from "../storage/session-store.js";
 import { AgentRuntime } from "../runtime/agent-runtime.js";
 import { createAgentCoreComposition, type AgentCoreComposition } from "../runtime/agent-core-composition.js";
 import { WorkbenchEventConnector } from "../runtime/workbench-event-connector.js";
@@ -25,6 +26,7 @@ import type { CreatePlanInput } from "../plan/plan-manager.js";
 import type { SubagentTaskRecord } from "../subagent/types.js";
 import type { SubagentTaskRequest } from "../subagent/types.js";
 import type { SubagentCommit } from "../subagent/types.js";
+import { buildTuiTranscriptEntries, type TuiTranscriptEntry } from "./transcript.js";
 
 export interface TuiRuntimeListener {
   (snapshot: WorkbenchSnapshot): void | Promise<void>;
@@ -52,6 +54,8 @@ export interface TuiContextReport {
   readonly usedPercent: number;
   readonly remainingTokens: number;
 }
+
+export type CheckpointRestoreScope = "filesAndConversation" | "filesOnly" | "conversationOnly";
 
 export interface TuiRuntime {
   readonly workspaceId: string;
@@ -82,19 +86,24 @@ export interface TuiRuntime {
   createSession(permissionMode?: TuiConfiguration["permissionMode"]): Promise<AgentSessionSnapshot>;
   activateSession(sessionId: string): Promise<AgentSessionSnapshot>;
   listSessions(): Promise<readonly AgentSessionSnapshot[]>;
+  trashSession(sessionId: string): Promise<TrashedSessionRecord>;
+  listTrash(): Promise<readonly TrashedSessionRecord[]>;
+  restoreTrash(sessionId: string): Promise<AgentSessionSnapshot>;
+  deleteTrash(sessionId: string): Promise<boolean>;
   listDiffs(): readonly DiffProposal[];
   getDiff(proposalId: string): DiffProposal | undefined;
   resolvePermission(requestId: string, decision: "allow" | "deny"): boolean;
   grantPermission?(requestId: string, scope: "session" | "project"): boolean;
   resolveDiff(proposalId: string, decision: "accepted" | "rejected"): Promise<DiffProposal>;
   listCheckpoints(): Promise<readonly CheckpointRecord[]>;
-  restoreCheckpoint(checkpointId: string): Promise<CheckpointRecord>;
+  restoreCheckpoint(checkpointId: string, scope?: CheckpointRestoreScope): Promise<CheckpointRecord>;
   retryActiveSession(): Promise<{ readonly sessionId: string; readonly runId: string }>;
   getToolResult(toolCallId: string): Promise<TuiToolResultDetail | undefined>;
   getHealthReport(): Promise<TuiHealthReport>;
   getContextReport(): Promise<TuiContextReport>;
   listTools(): readonly ToolManifest[];
   getSession(sessionId: string): Promise<AgentSessionSnapshot>;
+  listTranscriptEntries(): Promise<readonly TuiTranscriptEntry[]>;
   listPlans?(): readonly PlanRecord[];
   resolvePlan?(planId: string, decision: "approved" | "rejected"): Promise<PlanRecord>;
   completePlan?(planId: string): Promise<PlanRecord>;
@@ -170,6 +179,9 @@ export async function createTuiRuntime(
         browserEnabled: false,
         computerUseEnabled: false,
       }),
+      systemContextProvider: {
+        getContext: session => externalAccess.getModelContext(session.id),
+      },
       maxOutputTokensPerTurn: 8_192,
       contextWindowTokens: configuration.model.contextWindowTokens,
       // A run budget must allow at least one full-context request plus its
@@ -186,6 +198,7 @@ export async function createTuiRuntime(
     connector.start();
 
     await agent.restoreAll();
+    await agent.purgeTrashedSessions();
     await core.diffs.restoreAll();
     core.plans.restoreFromEvents((await core.journal.list()).map(entry => entry.event));
     await core.workbench.restore();
@@ -343,6 +356,23 @@ class TuiRuntimeImpl implements TuiRuntime {
   public async listSessions(): Promise<readonly AgentSessionSnapshot[]> {
     return this.agent.listSessions(this.workspaceId);
   }
+  public async trashSession(sessionId: string): Promise<TrashedSessionRecord> {
+    if (sessionId === this.activeSessionId) {
+      const active = await this.getActiveSession();
+      if (active.status === "running" || active.status === "awaitingPermission") throw new Error("运行期间不能删除会话");
+      this.externalAccess.revokeSession(sessionId);
+      this.agent.clearSessionPermissionGrants(sessionId);
+    }
+    return this.agent.trashSession(sessionId);
+  }
+  public listTrash(): Promise<readonly TrashedSessionRecord[]> { return this.agent.listTrashedSessions(); }
+  public async restoreTrash(sessionId: string): Promise<AgentSessionSnapshot> {
+    const candidate = (await this.agent.listTrashedSessions()).find(item => item.snapshot.id === sessionId);
+    if (candidate !== undefined && candidate.snapshot.workspaceId !== this.workspaceId) throw new Error("不能恢复其他工作区的会话");
+    const restored = await this.agent.restoreTrashedSession(sessionId);
+    return restored;
+  }
+  public deleteTrash(sessionId: string): Promise<boolean> { return this.agent.deleteTrashedSession(sessionId); }
 
   public listDiffs(): readonly DiffProposal[] {
     return this.core.diffs.list().filter(proposal => proposal.sessionId === this.activeSessionId || proposal.workspaceId === this.workspaceId);
@@ -373,7 +403,7 @@ class TuiRuntimeImpl implements TuiRuntime {
     return this.core.checkpoints.list().then(items => items.filter(item => item.sessionId === this.activeSessionId || item.workspaceId === this.workspaceId));
   }
 
-  public async restoreCheckpoint(checkpointId: string): Promise<CheckpointRecord> {
+  public async restoreCheckpoint(checkpointId: string, scope: CheckpointRestoreScope = "filesAndConversation"): Promise<CheckpointRecord> {
     const active = await this.getActiveSession();
     if (active.status === "running" || active.status === "awaitingPermission") {
       throw new Error("运行期间不能恢复 Checkpoint");
@@ -383,7 +413,20 @@ class TuiRuntimeImpl implements TuiRuntime {
     if (checkpoint.workspaceId !== this.workspaceId) {
       throw new Error("不能恢复其他工作区的 Checkpoint");
     }
-    return this.core.workspace.restoreCheckpoint(checkpointId);
+    if (scope === "filesOnly") return this.core.workspace.restoreCheckpoint(checkpointId);
+    if (checkpoint.sessionSnapshot === undefined) throw new Error("Checkpoint 缺少会话快照，不能恢复对话");
+    const branch = await this.agent.createBranchFromSession(checkpoint.sessionSnapshot, checkpoint.id);
+    try {
+      const restored = scope === "conversationOnly" ? checkpoint : await this.core.workspace.restoreCheckpoint(checkpointId);
+      await this.core.checkpoints.recordConversationBranch(checkpoint.id, branch.id);
+      this.activeSessionId = branch.id;
+      this.core.workbench.activate(branch.id);
+      await this.emitSnapshot(this.getSnapshot());
+      return restored;
+    } catch (error: unknown) {
+      await this.agent.trashSession(branch.id).catch(() => undefined);
+      throw error;
+    }
   }
 
   public async retryActiveSession(): Promise<{ readonly sessionId: string; readonly runId: string }> {
@@ -495,6 +538,12 @@ class TuiRuntimeImpl implements TuiRuntime {
     return this.agent.getSession(sessionId);
   }
 
+  public async listTranscriptEntries(): Promise<readonly TuiTranscriptEntry[]> {
+    const session = await this.getActiveSession();
+    const journal = await this.agent.listEvents(this.activeSessionId);
+    return buildTuiTranscriptEntries(session, journal);
+  }
+
   public listPlans(): readonly PlanRecord[] { return this.core.plans.list(this.activeSessionId); }
   public resolvePlan(planId: string, decision: "approved" | "rejected"): Promise<PlanRecord> { return this.core.orchestration.planReviews.resolve(planId, decision); }
   public async completePlan(planId: string): Promise<PlanRecord> {
@@ -544,7 +593,6 @@ class TuiRuntimeImpl implements TuiRuntime {
     this.agent.clearSessionPermissionGrants(this.activeSessionId);
     this.externalAccess.revokeSession(this.activeSessionId);
     let failure: unknown;
-    this.externalAccess.revokeSession(this.activeSessionId);
     await this.core.orchestration.dispose(this.activeSessionId).catch(error => { failure ??= error; });
     this.listeners.clear();
     try {

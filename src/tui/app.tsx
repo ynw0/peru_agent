@@ -4,6 +4,7 @@ import { lstat } from "node:fs/promises";
 import sliceAnsi from "slice-ansi";
 import { Box, Text, useApp, useInput, useStdin, useWindowSize } from "ink";
 import type { AgentSessionSnapshot, AgentQueuedInput } from "../agent/types.js";
+import type { TrashedSessionRecord } from "../storage/session-store.js";
 import type { CheckpointRecord } from "../checkpoint/checkpoint-manager.js";
 import type { DiffProposal } from "../diff/diff-manager.js";
 import type { WorkbenchSnapshot } from "../workbench/workbench-state.js";
@@ -32,13 +33,16 @@ import type { TuiToolResultDetail } from "./runtime.js";
 import type { PlanRecord } from "../plan/plan-manager.js";
 import type { SubagentTaskRecord } from "../subagent/types.js";
 import type { SubagentCommit } from "../subagent/types.js";
-import { buildTuiTimeline, getTuiInputWindow, layoutTuiLines, layoutTuiTextLines, type TuiRenderedLine } from "./terminal-layout.js";
+import { buildTuiConversationTurns, flattenTuiConversationTurns, getTuiInputWindow, layoutTuiLines, layoutTuiTextLines, type TuiRenderedLine } from "./terminal-layout.js";
 import { formatCollapsedInput } from "./user-input.js";
-import { parseTuiMouseInput, parseTuiMouseInputs, type TuiMouseEvent } from "./mouse.js";
+import { isTuiMouseInputFragment, parseTuiMouseInput, type TuiMouseEvent } from "./mouse.js";
+import { TuiInputRouter } from "./input-router.js";
+import { TuiHitRegionRegistry } from "./hit-regions.js";
 import { TuiPlanEditor, TuiTaskEditor } from "./orchestration-editor.js";
 import { calculateTuiScreenLayout } from "./screen-layout.js";
 import { Osc52ClipboardWriter } from "./clipboard.js";
 import { anchorAtMouse, selectedText, selectionForMouse, selectionIsCollapsed, selectionColumnsForLine, type TuiTextSelection } from "./selection.js";
+import { filterTuiTranscriptEntries, nextTuiTranscriptMatch, type TuiTranscriptEntry, type TuiTranscriptFilter } from "./transcript.js";
 
 interface TuiAppProps {
   readonly controller: TuiController;
@@ -67,12 +71,15 @@ interface NavigationKey {
   readonly down?: boolean;
   readonly upArrow?: boolean;
   readonly downArrow?: boolean;
+  readonly leftArrow?: boolean;
+  readonly rightArrow?: boolean;
   readonly return?: boolean;
   readonly escape?: boolean;
   readonly tab?: boolean;
   readonly pageUp?: boolean;
   readonly pageDown?: boolean;
   readonly ctrl?: boolean;
+  readonly shift?: boolean;
   readonly home?: boolean;
   readonly end?: boolean;
 }
@@ -87,6 +94,7 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
   const [clearedItems, setClearedItems] = useState(0);
   const [clearedToolItems, setClearedToolItems] = useState(0);
   const [sessions, setSessions] = useState<readonly AgentSessionSnapshot[]>([]);
+  const [trashSessions, setTrashSessions] = useState<readonly TrashedSessionRecord[]>([]);
   const [diffs, setDiffs] = useState<readonly DiffProposal[]>([]);
   const [checkpoints, setCheckpoints] = useState<readonly CheckpointRecord[]>([]);
   const [toolDetail, setToolDetail] = useState<TuiToolResultDetail | undefined>();
@@ -94,6 +102,10 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
   const [plans, setPlans] = useState<readonly PlanRecord[]>([]);
   const [tasks, setTasks] = useState<readonly SubagentTaskRecord[]>([]);
   const [artifacts, setArtifacts] = useState<readonly SubagentCommit[]>([]);
+  const [transcriptEntries, setTranscriptEntries] = useState<readonly TuiTranscriptEntry[]>([]);
+  const [transcriptQuery, setTranscriptQuery] = useState("");
+  const [transcriptFilter, setTranscriptFilter] = useState<TuiTranscriptFilter>("all");
+  const [transcriptSearchMode, setTranscriptSearchMode] = useState(false);
   const [suggestions, setSuggestions] = useState<readonly TuiSuggestion[]>([]);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [verboseTranscript, setVerboseTranscript] = useState(false);
@@ -105,6 +117,8 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
   const timelineSelectionRef = useRef<TuiTextSelection | undefined>(undefined);
   const selectingTimelineRef = useRef(false);
   const mouseHandlerRef = useRef<(event: TuiMouseEvent) => void>(() => undefined);
+  const terminalInputRouterRef = useRef<TuiInputRouter | undefined>(undefined);
+  const hitRegionRegistryRef = useRef(new TuiHitRegionRegistry());
   const clipboard = useMemo(() => new Osc52ClipboardWriter(), []);
   const previousColumns = useRef(columns);
   const lastEscapeAt = useRef(0);
@@ -120,14 +134,19 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
 
   useEffect(() => {
     const current = input.text;
+    if (transcriptSearchMode) { setSuggestions([]); return; }
     if (current.trimStart().startsWith("/")) { setSuggestions(getTuiSuggestions(current, TUI_COMMANDS, [])); setSuggestionIndex(0); return; }
     if (/(?:^|\s)@[^\s]*$/.test(current)) { void controller.getRuntime().suggestFiles(current.match(/@([^\s]*)$/)?.[1] ?? "").then(files => { setSuggestions(getTuiSuggestions(current, TUI_COMMANDS, files)); setSuggestionIndex(0); }).catch(() => setSuggestions([])); return; }
     setSuggestions([]);
-  }, [input.text, controller]);
+  }, [input.text, controller, transcriptSearchMode]);
 
-  const timelineEntries = useMemo(
-    () => buildTuiTimeline(state.activeSession, state.snapshot),
+  const conversationTurns = useMemo(
+    () => buildTuiConversationTurns(state.activeSession, state.snapshot),
     [state.activeSession, state.snapshot],
+  );
+  const timelineEntries = useMemo(
+    () => flattenTuiConversationTurns(conversationTurns, verboseTranscript),
+    [conversationTurns, verboseTranscript],
   );
   const visibleEntries = useMemo(
     () => timelineEntries.slice(Math.max(clearedItems, clearedToolItems)),
@@ -137,11 +156,33 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
     () => layoutTuiLines(visibleEntries, Math.max(24, columns - 6), { verbose: verboseTranscript }).lines,
     [visibleEntries, columns, verboseTranscript],
   );
+  const filteredTranscriptEntries = useMemo(
+    () => filterTuiTranscriptEntries(transcriptEntries, transcriptFilter, transcriptQuery),
+    [transcriptEntries, transcriptFilter, transcriptQuery],
+  );
+  const transcriptLines = useMemo(
+    () => layoutTuiTextLines(filteredTranscriptEntries.map(entry => `[${entry.kind}] ${entry.text}`), Math.max(24, columns - 8)),
+    [filteredTranscriptEntries, columns],
+  );
   const screenLayout = calculateTuiScreenLayout({
     rows,
+    columns,
     headerRows: calculateHeaderRows(state, columns),
     suggestionRows: suggestions.length > 0 ? Math.min(9, suggestions.length + 1) : 0,
   });
+  useEffect(() => {
+    hitRegionRegistryRef.current.set(overlay === undefined && !home
+      ? [{
+          id: "timeline",
+          left: 0,
+          top: screenLayout.timelineContentTopRow,
+          right: Math.max(0, columns - 1),
+          bottom: screenLayout.timelineContentBottomRow,
+        }]
+      : overlay === undefined
+        ? []
+        : [{ id: "overlay", left: 0, top: 0, right: Math.max(0, columns - 1), bottom: Math.max(0, rows - 1) }]);
+  }, [overlay, home, columns, rows, screenLayout.timelineContentTopRow, screenLayout.timelineContentBottomRow]);
   const timelinePageSize = screenLayout.timelinePageSize;
   const detailSourceLines = overlay === undefined || overlay.kind === "panel" || overlay.kind === "config" || overlay.kind === "planEditor" || overlay.kind === "taskEditor" || overlay.kind === "artifactConfirm" || overlay.kind === "taskStartConfirm" || overlay.kind === "restore" || overlay.kind === "queueChoice" || overlay.kind === "externalAccess" || overlay.kind === "shell" || overlay.kind === "planReview"
     ? []
@@ -153,7 +194,8 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
   const persistentIssue = state.lastRunError
     ?? (state.snapshot.aborted ? { code: "aborted", message: "本次 Agent 运行已取消" } : undefined);
   const effectiveTimelineViewport = reduceTuiViewport(timelineViewport, {}, timelineLines.length, timelinePageSize);
-  const effectiveDetailViewport = reduceTuiViewport(detailViewport, {}, detailLines.length, Math.max(5, rows - 8));
+  const detailViewportLength = overlay?.kind === "panel" && overlay.panel === "transcript" ? transcriptLines.length : detailLines.length;
+  const effectiveDetailViewport = reduceTuiViewport(detailViewport, {}, detailViewportLength, Math.max(5, rows - 8));
   const timelineRange = getTuiViewportRange(effectiveTimelineViewport);
   const visibleTimelineLines = timelineLines.slice(timelineRange.start, timelineRange.end);
 
@@ -185,8 +227,21 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
       }
       return;
     }
+    if (overlay?.kind === "panel" && overlay.panel === "transcript") {
+      if (mouse.kind === "wheel") {
+        setDetailViewport(current => reduceTuiViewport(current, { wheel: mouse.direction, wheelAmount: mouse.amount }, transcriptLines.length, Math.max(5, rows - 8)));
+        return;
+      }
+      if (mouse.kind === "press" && mouse.button === "right") {
+        const entry = filteredTranscriptEntries[overlay.selected];
+        if (entry === undefined) controller.setStatus("没有可复制的 Transcript 内容");
+        else void clipboard.copy(entry.text).then(() => controller.setStatus(`已复制 ${entry.text.length} 个字符`), error => controller.setStatus(errorMessage(error)));
+        return;
+      }
+      return;
+    }
     if (overlay?.kind === "panel" && mouse.kind === "press" && mouse.button === "left") {
-      const lines = panelLines(overlay.panel, state.snapshot, sessions, diffs, checkpoints, queuedInputs, plans, tasks, artifacts);
+      const lines = panelLines(overlay.panel, state.snapshot, sessions, diffs, checkpoints, queuedInputs, plans, tasks, artifacts, trashSessions);
       const selected = selectablePanelIndexAtMouse(mouse.x, mouse.y, overlay.selected, lines.length, columns, rows);
       if (selected !== undefined) {
         setOverlay({ ...overlay, selected });
@@ -195,6 +250,8 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
       return;
     }
     if (overlay === undefined && !home) {
+      const hit = hitRegionRegistryRef.current.hit(mouse.x, mouse.y);
+      if (hit?.id !== "timeline") return;
       if (mouse.kind === "wheel") {
         setTimelineViewport(current => reduceTuiViewport(current, { wheel: mouse.direction, wheelAmount: mouse.amount }, timelineLines.length, timelinePageSize));
         return;
@@ -203,7 +260,8 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
         timelineSelectionRef.current,
         mouse,
         visibleTimelineLines,
-        screenLayout.timelineTopRow,
+        screenLayout.timelineContentTopRow,
+        screenLayout.timelineContentLeftColumn,
       );
       if (mouse.kind === "press" && mouse.button === "left") {
         timelineSelectionRef.current = nextSelection;
@@ -223,7 +281,7 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
         return;
       }
       if (mouse.kind === "press" && mouse.button === "right") {
-        const clicked = anchorAtMouse(mouse, visibleTimelineLines, screenLayout.timelineTopRow);
+        const clicked = anchorAtMouse(mouse, visibleTimelineLines, screenLayout.timelineContentTopRow, screenLayout.timelineContentLeftColumn);
         const clickedLine = clicked === undefined
           ? undefined
           : timelineLines.find(line => line.entryId === clicked.entryId && line.lineIndex === clicked.lineIndex);
@@ -237,18 +295,24 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
       return;
     }
     if (overlay !== undefined && mouse.kind === "wheel" && isScrollableOverlay(overlay)) {
-      setDetailViewport(current => reduceTuiViewport(current, { wheel: mouse.direction, wheelAmount: mouse.amount }, detailLines.length, Math.max(5, rows - 8)));
+      const sourceLength = overlay.kind === "panel" && overlay.panel === "transcript" ? transcriptLines.length : detailLines.length;
+      setDetailViewport(current => reduceTuiViewport(current, { wheel: mouse.direction, wheelAmount: mouse.amount }, sourceLength, Math.max(5, rows - 8)));
     }
   };
 
   useEffect(() => {
+    const router = new TuiInputRouter(event => {
+      if (event.kind === "mouse") mouseHandlerRef.current(event.event);
+    });
+    terminalInputRouterRef.current = router;
     const handleRawInput = (chunk: Buffer | string): void => {
-      const events = parseTuiMouseInputs(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
-      for (const event of events) mouseHandlerRef.current(event);
+      router.feed(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
     };
     stdin.on("data", handleRawInput);
     return () => {
       stdin.removeListener("data", handleRawInput);
+      router.reset();
+      if (terminalInputRouterRef.current === router) terminalInputRouterRef.current = undefined;
     };
   }, [stdin]);
 
@@ -262,8 +326,9 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
   }, [timelineLines.length, timelinePageSize, columns]);
 
   useEffect(() => {
-    setDetailViewport(current => reduceTuiViewport(current, {}, detailLines.length, Math.max(5, rows - 8)));
-  }, [detailLines.length, rows, columns, overlayIdentity(overlay)]);
+    const sourceLength = overlay?.kind === "panel" && overlay.panel === "transcript" ? transcriptLines.length : detailLines.length;
+    setDetailViewport(current => reduceTuiViewport(current, {}, sourceLength, Math.max(5, rows - 8)));
+  }, [detailLines.length, transcriptLines.length, rows, columns, overlayIdentity(overlay)]);
 
   useEffect(() => {
     setOverlayActionIndex(0);
@@ -312,13 +377,13 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
     if (overlay?.kind !== "panel") return;
     void refreshPanel(overlay.panel);
     if (overlay.panel === "queue") void controller.listQueuedInputs().then(setQueuedInputs).catch(() => undefined);
-  }, [overlay?.kind === "panel" ? overlay.panel : undefined, state.runtime]);
+  }, [overlay?.kind === "panel" ? overlay.panel : undefined, state.runtime, state.activeSession.updatedAt]);
 
   useEffect(() => {
     if (overlay?.kind !== "panel") return;
     const corrected = clampTuiSelection(overlay.selected, panelCount(overlay.panel));
     if (corrected !== overlay.selected) setOverlay({ ...overlay, selected: corrected });
-  }, [overlay, sessions, diffs, checkpoints, queuedInputs, plans, tasks, artifacts, state.snapshot.pendingPermissions, state.snapshot.tools]);
+  }, [overlay, sessions, diffs, checkpoints, queuedInputs, plans, tasks, artifacts, transcriptEntries, transcriptFilter, transcriptQuery, state.snapshot.pendingPermissions, state.snapshot.tools]);
 
   useEffect(() => {
     if (overlay?.kind !== "tool") return;
@@ -329,8 +394,27 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
   useInput((value, key) => {
     if (state.switching) return;
     const mouse = parseTuiMouseInput(value);
-    if (mouse !== undefined) return;
+    if (mouse !== undefined || isTuiMouseInputFragment(value)) return;
     if (overlay?.kind === "config" || overlay?.kind === "planEditor" || overlay?.kind === "taskEditor") return;
+    if (overlay?.kind === "panel" && overlay.panel === "transcript" && transcriptSearchMode) {
+      if (key.escape || (key.ctrl && value.toLocaleLowerCase() === "c")) {
+        setTranscriptSearchMode(false);
+        setInput(createTuiInputBuffer());
+        controller.setStatus("已取消 Transcript 搜索");
+        return;
+      }
+      if (key.return) {
+        setTranscriptQuery(input.text);
+        setTranscriptSearchMode(false);
+        setInput(createTuiInputBuffer());
+        setDetailViewport(createTuiViewport());
+        controller.setStatus(input.text.trim() === "" ? "Transcript 搜索已清除" : `Transcript 搜索：${input.text}`);
+        return;
+      }
+      const transition = reduceTuiInput(input, value, key);
+      setInput(transition.state);
+      return;
+    }
     const actions = overlay === undefined ? [] : overlayActions(overlay);
     if (actions.length > 0) {
       if (key.leftArrow || key.upArrow) {
@@ -355,6 +439,15 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
     }
     if (key.ctrl && value.toLocaleLowerCase() === "r") { controller.setStatus("历史搜索：使用 Ctrl+R 查找下一项，Enter 发送，Esc 取消"); return; }
     if (key.ctrl && value.toLocaleLowerCase() === "o") { setVerboseTranscript(current => !current); controller.setStatus(verboseTranscript ? "已关闭 Verbose Transcript" : "已开启 Verbose Transcript"); return; }
+    if (overlay === undefined && !home && value.toLocaleLowerCase() === "c" && !key.ctrl) {
+      const copied = selectedText(timelineLines, timelineSelectionRef.current);
+      if (copied.trim() === "") controller.setStatus("请先左键拖选对话内容");
+      else void clipboard.copy(copied).then(
+        () => controller.setStatus(`已复制 ${copied.length} 个字符`),
+        error => controller.setStatus(errorMessage(error)),
+      );
+      return;
+    }
     if (overlay?.kind === "permission") { void handlePermissionKey(value, key); return; }
     if (overlay?.kind === "diff") { void handleDiffKey(value, key); return; }
     if (overlay?.kind === "restore") { void handleRestoreKey(value, key); return; }
@@ -369,6 +462,12 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
       if (key.upArrow) { setSuggestionIndex(current => (current - 1 + suggestions.length) % suggestions.length); return; }
       if (key.downArrow) { setSuggestionIndex(current => (current + 1) % suggestions.length); return; }
       if (key.tab) { const selected = suggestions[suggestionIndex]; if (selected !== undefined) { setInput(current => ({ ...current, text: acceptTuiSuggestion(current.text, selected), cursor: acceptTuiSuggestion(current.text, selected).length })); setSuggestions([]); } return; }
+    }
+    if (key.escape && overlay === undefined && timelineSelectionRef.current !== undefined) {
+      timelineSelectionRef.current = undefined;
+      setTimelineSelection(undefined);
+      controller.setStatus("已清除文本选择");
+      return;
     }
     if (key.escape && input.text !== "") {
       const now = Date.now();
@@ -528,7 +627,7 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
         case "permissions": openPanel("permissions"); return;
         case "subagents": setTasks(controller.listTasks()); openPanel("subagents"); return;
         case "trash": openPanel("trash"); return;
-        case "transcript": setOverlay({ kind: "panel", panel: "transcript", selected: 0 }); return;
+        case "transcript": setTranscriptQuery(""); setTranscriptFilter("all"); setTranscriptSearchMode(false); setOverlay({ kind: "panel", panel: "transcript", selected: 0 }); return;
         case "rename":
           if (command.title === undefined) {
             const renameInput = "/rename ";
@@ -595,17 +694,57 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
   async function refreshPanel(panel: PanelKind): Promise<void> {
     try {
       if (panel === "sessions") setSessions(await controller.listSessions());
+      if (panel === "trash") setTrashSessions(await controller.listTrash());
       if (panel === "diffs") setDiffs(controller.listDiffs());
       if (panel === "checkpoints") setCheckpoints(await controller.listCheckpoints());
       if (panel === "plans") setPlans(controller.listPlans());
       if (panel === "tasks") setTasks(controller.listTasks());
       if (panel === "artifacts") setArtifacts(await controller.listArtifacts());
+      if (panel === "transcript") setTranscriptEntries(await controller.listTranscriptEntries());
     } catch (error: unknown) { controller.setStatus(errorMessage(error)); }
   }
 
   async function handlePanelKey(value: string, key: NavigationKey): Promise<void> {
     if (overlay?.kind !== "panel") return;
-    if (overlay.panel === "help" || overlay.panel === "model" || overlay.panel === "doctor" || overlay.panel === "transcript") {
+    if (overlay.panel === "transcript") {
+      if (transcriptSearchMode) return;
+      if (key.escape) { setOverlay(undefined); return; }
+      if (key.ctrl && value.toLocaleLowerCase() === "f") {
+        setTranscriptSearchMode(true);
+        setInput(createTuiInputBuffer());
+        controller.setStatus("Transcript 搜索：输入关键词后按 Enter，Esc 取消");
+        return;
+      }
+      if (key.leftArrow || value.toLocaleLowerCase() === "f") {
+        const filters: readonly TuiTranscriptFilter[] = ["all", "user", "assistant", "tool", "event"];
+        const index = filters.indexOf(transcriptFilter);
+        setTranscriptFilter(filters[(index + 1) % filters.length] ?? "all");
+        setDetailViewport(createTuiViewport());
+        return;
+      }
+      if (key.upArrow || key.up) { setOverlay({ ...overlay, selected: moveTuiSelection(overlay.selected, Math.max(1, filteredTranscriptEntries.length), -1) }); return; }
+      if (key.downArrow || key.down) { setOverlay({ ...overlay, selected: moveTuiSelection(overlay.selected, Math.max(1, filteredTranscriptEntries.length), 1) }); return; }
+      if (key.pageUp || key.pageDown || (key.ctrl && (key.home || key.end))) {
+        setDetailViewport(current => reduceTuiViewport(current, key, transcriptLines.length, Math.max(5, rows - 8)));
+        return;
+      }
+      if (key.return && transcriptQuery.trim() !== "") {
+        const selectedId = filteredTranscriptEntries[overlay.selected]?.id;
+        const currentOriginal = selectedId === undefined ? -1 : transcriptEntries.findIndex(entry => entry.id === selectedId);
+        const match = nextTuiTranscriptMatch(transcriptEntries, transcriptQuery, currentOriginal, key.shift === true ? -1 : 1);
+        if (match >= 0) setOverlay({ ...overlay, selected: filteredTranscriptEntries.findIndex(entry => entry.id === transcriptEntries[match]?.id) });
+        else controller.setStatus("没有找到匹配的 Transcript 内容");
+        return;
+      }
+      if (value.toLocaleLowerCase() === "c") {
+        const entry = filteredTranscriptEntries[overlay.selected];
+        if (entry === undefined) { controller.setStatus("没有可复制的 Transcript 内容"); return; }
+        void clipboard.copy(entry.text).then(() => controller.setStatus(`已复制 ${entry.text.length} 个字符`), error => controller.setStatus(errorMessage(error)));
+        return;
+      }
+      return;
+    }
+    if (overlay.panel === "help" || overlay.panel === "model" || overlay.panel === "doctor") {
       if (key.pageUp || key.pageDown || (key.ctrl && (key.home || key.end))) {
         setDetailViewport(current => reduceTuiViewport(current, key, layoutTuiTextLines(panelDetailLines(overlay.panel, state), Math.max(24, columns - 8)).length, Math.max(5, rows - 8)));
       } else if (key.escape) {
@@ -621,6 +760,25 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
     if (key.pageUp) { setOverlay({ ...overlay, selected: Math.max(0, overlay.selected - Math.max(1, rows - 10)) }); return; }
     if (key.pageDown) { setOverlay({ ...overlay, selected: Math.min(Math.max(0, count - 1), overlay.selected + Math.max(1, rows - 10)) }); return; }
     if (overlay.panel === "queue" && value.toLocaleLowerCase() === "d") { const item = queuedInputs[overlay.selected]; if (item !== undefined) { await controller.removeQueuedInput(item.id); setQueuedInputs(current => current.filter(entry => entry.id !== item.id)); } return; }
+    if (overlay.panel === "sessions" && value.toLocaleLowerCase() === "d") {
+      const session = sessions[overlay.selected];
+      if (session !== undefined) {
+        if (session.id === state.activeSession.id) {
+          await controller.trashSession(session.id);
+          await createNewSession();
+          setHome(true);
+        } else {
+          await controller.trashSession(session.id);
+          setSessions(await controller.listSessions());
+        }
+      }
+      return;
+    }
+    if (overlay.panel === "trash" && value.toLocaleLowerCase() === "d") {
+      const record = trashSessions[overlay.selected];
+      if (record !== undefined) { await controller.deleteTrash(record.snapshot.id); setTrashSessions(await controller.listTrash()); }
+      return;
+    }
     if (overlay.panel === "plans" && (value.toLocaleLowerCase() === "c" || value.toLocaleLowerCase() === "x")) { const plan = plans[overlay.selected]; if (plan !== undefined) { await (value.toLocaleLowerCase() === "c" ? controller.completePlan(plan.id) : controller.cancelPlan(plan.id)); setPlans(controller.listPlans()); } return; }
     if ((overlay.panel === "tasks" || overlay.panel === "subagents") && value.toLocaleLowerCase() === "x") { const task = tasks[overlay.selected]; if (task !== undefined) { await controller.abortTask(task.id); setTasks(controller.listTasks()); } return; }
     if (overlay.panel === "tasks" && value.toLocaleLowerCase() === "r") { const task = tasks[overlay.selected]; if (task !== undefined && (task.status === "failed" || task.status === "aborted" || task.status === "gateInterrupted")) { await controller.retryGateAttempt(task.id); setTasks(controller.listTasks()); } return; }
@@ -658,16 +816,20 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
         if (task.role === "implementer") setOverlay({ kind: "taskStartConfirm", taskId: task.id });
         else await controller.startTask(task.id);
       }
+    } else if (panel === "trash") {
+      const record = trashSessions[selected];
+      if (record !== undefined) { await controller.restoreTrash(record.snapshot.id); setSessions(await controller.listSessions()); setTrashSessions(await controller.listTrash()); }
     }
   }
 
   function panelCount(panel: PanelKind): number {
     if (panel === "sessions") return sessions.length;
+    if (panel === "trash") return trashSessions.length;
     if (panel === "diffs") return diffs.length;
     if (panel === "checkpoints") return checkpoints.length;
     if (panel === "permissions") return state.snapshot.pendingPermissions.length;
     if (panel === "tools") return state.snapshot.tools.slice(-8).length;
-    if (panel === "transcript") return Math.max(1, timelineLines.length);
+    if (panel === "transcript") return Math.max(1, filteredTranscriptEntries.length);
     if (panel === "queue") return Math.max(1, queuedInputs.length);
     if (panel === "plans") return Math.max(1, plans.length);
     if (panel === "tasks" || panel === "subagents") return Math.max(1, tasks.length);
@@ -702,8 +864,13 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
 
   async function handleRestoreKey(value: string, key: NavigationKey): Promise<void> {
     if (overlay?.kind !== "restore") return;
-    if (value.toLocaleLowerCase() === "a") {
-      try { await controller.restoreCheckpoint(overlay.checkpointId); controller.setStatus("Checkpoint 已恢复"); setOverlay(undefined); }
+    const choice = value.toLocaleLowerCase();
+    if (choice === "a" || choice === "b" || choice === "f" || choice === "c") {
+      try {
+        const scope = choice === "f" ? "filesOnly" : choice === "c" ? "conversationOnly" : "filesAndConversation";
+        await controller.restoreCheckpoint(overlay.checkpointId, scope);
+        controller.setStatus("Checkpoint 已恢复"); setOverlay(undefined); setHome(false);
+      }
       catch (error: unknown) { controller.setStatus(errorMessage(error)); }
       return;
     }
@@ -743,7 +910,7 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
         <Text dimColor>{state.switching ? "正在切换工作区…" : state.status}{effectiveTimelineViewport.unread > 0 ? ` · ${effectiveTimelineViewport.unread} 行新输出` : ""}</Text>
         <Text dimColor>{state.snapshot.sessionStatus} · 上下文 {contextTokens}/{contextWindowTokens} ({contextPercent}%，80% 自动压缩) · PgUp/PgDn 浏览 · 左键拖选/右键复制 · Ctrl+C 取消</Text>
       </Box>
-      {overlay !== undefined && <TuiOverlayFrame height={screenLayout.overlayHeight}><OverlayView overlay={overlay} controller={controller} state={state} sessions={sessions} diffs={diffs} checkpoints={checkpoints} queuedInputs={queuedInputs} plans={plans} tasks={tasks} artifacts={artifacts} toolDetail={toolDetail} detailLines={detailLines} detailViewport={effectiveDetailViewport} columns={columns} rows={rows} timelineLines={timelineLines} actionIndex={overlayActionIndex} onClose={() => setOverlay(undefined)} /></TuiOverlayFrame>}
+      {overlay !== undefined && <TuiOverlayFrame height={screenLayout.overlayHeight}><OverlayView overlay={overlay} controller={controller} state={state} sessions={sessions} trashSessions={trashSessions} diffs={diffs} checkpoints={checkpoints} queuedInputs={queuedInputs} plans={plans} tasks={tasks} artifacts={artifacts} toolDetail={toolDetail} detailLines={detailLines} detailViewport={effectiveDetailViewport} columns={columns} rows={rows} timelineLines={timelineLines} transcriptEntries={filteredTranscriptEntries} transcriptQuery={transcriptQuery} transcriptFilter={transcriptFilter} actionIndex={overlayActionIndex} onClose={() => setOverlay(undefined)} /></TuiOverlayFrame>}
     </Box>
   );
 }
@@ -796,7 +963,7 @@ function sliceDisplay(value: string, start: number, end: number): string {
   return sliceAnsi(value, start, Math.max(start, end));
 }
 
-function OverlayView({ overlay, controller, state, sessions, diffs, checkpoints, queuedInputs, plans, tasks, artifacts, toolDetail, detailLines, detailViewport, columns, rows, timelineLines, actionIndex, onClose }: { readonly overlay: Overlay; readonly controller: TuiController; readonly state: TuiControllerState; readonly sessions: readonly AgentSessionSnapshot[]; readonly diffs: readonly DiffProposal[]; readonly checkpoints: readonly CheckpointRecord[]; readonly queuedInputs: readonly AgentQueuedInput[]; readonly plans: readonly PlanRecord[]; readonly tasks: readonly SubagentTaskRecord[]; readonly artifacts: readonly SubagentCommit[]; readonly toolDetail: TuiToolResultDetail | undefined; readonly detailLines: readonly string[]; readonly detailViewport: TuiViewportState; readonly columns: number; readonly rows: number; readonly timelineLines: readonly TuiRenderedLine[]; readonly actionIndex: number; readonly onClose: () => void }): ReactElement {
+function OverlayView({ overlay, controller, state, sessions, trashSessions, diffs, checkpoints, queuedInputs, plans, tasks, artifacts, toolDetail, detailLines, detailViewport, columns, rows, timelineLines, transcriptEntries, transcriptQuery, transcriptFilter, actionIndex, onClose }: { readonly overlay: Overlay; readonly controller: TuiController; readonly state: TuiControllerState; readonly sessions: readonly AgentSessionSnapshot[]; readonly trashSessions: readonly TrashedSessionRecord[]; readonly diffs: readonly DiffProposal[]; readonly checkpoints: readonly CheckpointRecord[]; readonly queuedInputs: readonly AgentQueuedInput[]; readonly plans: readonly PlanRecord[]; readonly tasks: readonly SubagentTaskRecord[]; readonly artifacts: readonly SubagentCommit[]; readonly toolDetail: TuiToolResultDetail | undefined; readonly detailLines: readonly string[]; readonly detailViewport: TuiViewportState; readonly columns: number; readonly rows: number; readonly timelineLines: readonly TuiRenderedLine[]; readonly transcriptEntries: readonly TuiTranscriptEntry[]; readonly transcriptQuery: string; readonly transcriptFilter: TuiTranscriptFilter; readonly actionIndex: number; readonly onClose: () => void }): ReactElement {
   if (overlay.kind === "config") return <TuiConfigurationEditor initialDraft={overlay.draft} embedded onCancel={onClose} onSubmit={async draft => { await controller.reconfigure(await configurationFromTuiSetupDraft(draft)); onClose(); }} />;
   if (overlay.kind === "planEditor") return <TuiPlanEditor {...(overlay.instruction === undefined ? {} : { instruction: overlay.instruction })} onCancel={onClose} onSubmit={async input => { try { await controller.createStructuredPlan(input); controller.setStatus("Plan 已创建，等待审核"); onClose(); } catch (error: unknown) { controller.setStatus(errorMessage(error)); } }} />;
   if (overlay.kind === "taskEditor") return <TuiTaskEditor {...(overlay.instruction === undefined ? {} : { instruction: overlay.instruction })} onCancel={onClose} onSubmit={async input => { try { await controller.dispatchStructuredTask(input); controller.setStatus(input.role === "implementer" ? "Implementer 已排队，等待确认启动" : "只读子 Agent 已启动"); onClose(); } catch (error: unknown) { controller.setStatus(errorMessage(error)); } }} />;
@@ -806,11 +973,14 @@ function OverlayView({ overlay, controller, state, sessions, diffs, checkpoints,
     if (overlay.panel === "help") return <ScrollableModal title="帮助" lines={layoutTuiTextLines(TUI_HELP.split("\n"), Math.max(24, columns - 8))} viewport={detailViewport} footer="↑/↓ 选择，Enter 打开，PgUp/PgDn 浏览，Esc 返回" />;
     if (overlay.panel === "model") return <ScrollableModal title="模型" lines={layoutTuiTextLines([`模型：${state.configuration.model.model}`, `Endpoint：${state.configuration.model.baseUrl}${state.configuration.model.chatCompletionsPath}`, `API Key：${state.configuration.model.apiKey.trim() === "" ? "未配置" : "已配置（不会显示值）"}`], Math.max(24, columns - 8))} viewport={detailViewport} footer="Esc 返回" />;
     if (overlay.panel === "doctor") return <DoctorPanel health={state.health} viewport={detailViewport} columns={columns} />;
-    if (overlay.panel === "transcript") return <ScrollableModal title="Transcript（完整会话顺序）" lines={timelineLines.map(line => line.text)} viewport={detailViewport} footer="PgUp/PgDn 浏览；Esc 返回" />;
-    const lines = panelLines(overlay.panel, state.snapshot, sessions, diffs, checkpoints, queuedInputs, plans, tasks, artifacts);
+    if (overlay.panel === "transcript") {
+      const transcriptLines = layoutTuiTextLines(transcriptEntries.map(entry => `[${entry.kind}] ${entry.text}`), Math.max(24, columns - 8));
+      return <ScrollableModal title={`Transcript · ${transcriptFilter}${transcriptQuery === "" ? "" : ` · 搜索：${transcriptQuery}`}`} lines={transcriptLines} viewport={detailViewport} footer="Ctrl+F 搜索 · ← 切换过滤 · C/Enter 复制 · PgUp/PgDn/滚轮浏览 · Esc 返回" />;
+    }
+    const lines = panelLines(overlay.panel, state.snapshot, sessions, diffs, checkpoints, queuedInputs, plans, tasks, artifacts, trashSessions);
     return <SelectableModal title={panelTitle(overlay.panel)} selected={clampTuiSelection(overlay.selected, lines.length)} lines={lines} rows={rows} />;
   }
-  if (overlay.kind === "restore") return <ActionModal title={`恢复 Checkpoint ${overlay.checkpointId}`} lines={["这会把工作区文件恢复到修改前内容。"]} actions={overlayActions(overlay)} selected={actionIndex} />;
+  if (overlay.kind === "restore") return <ActionModal title={`恢复 Checkpoint ${overlay.checkpointId}`} lines={["选择恢复范围：文件和对话会创建新的分支 Session；原 Session 保持不变。"]} actions={overlayActions(overlay)} selected={actionIndex} />;
   if (overlay.kind === "queueChoice") return <ActionModal title="运行中提交" lines={["选择这条输入如何进入当前运行；Esc 取消。"]} actions={overlayActions(overlay)} selected={actionIndex} />;
   if (overlay.kind === "externalAccess") return <ActionModal title="授权访问外部目录" lines={["Agent 请求读取/提出修改以下外部路径：", ...overlay.paths]} actions={overlayActions(overlay)} selected={actionIndex} />;
   if (overlay.kind === "shell") return <ActionModal title="确认 Shell 命令" lines={["该命令将通过 PowerShell Tool 和 Sandbox Broker 执行：", "$ " + overlay.command]} actions={overlayActions(overlay)} selected={actionIndex} />;
@@ -873,9 +1043,10 @@ function detailFooter(overlay: Exclude<Overlay, { readonly kind: "panel" | "conf
   return "PgUp/PgDn 浏览，Esc 返回";
 }
 
-function panelLines(panel: PanelKind, snapshot: WorkbenchSnapshot, sessions: readonly AgentSessionSnapshot[], diffs: readonly DiffProposal[], checkpoints: readonly CheckpointRecord[], queuedInputs: readonly AgentQueuedInput[] = [], plans: readonly PlanRecord[] = [], tasks: readonly SubagentTaskRecord[] = [], artifacts: readonly SubagentCommit[] = []): readonly string[] {
+function panelLines(panel: PanelKind, snapshot: WorkbenchSnapshot, sessions: readonly AgentSessionSnapshot[], diffs: readonly DiffProposal[], checkpoints: readonly CheckpointRecord[], queuedInputs: readonly AgentQueuedInput[] = [], plans: readonly PlanRecord[] = [], tasks: readonly SubagentTaskRecord[] = [], artifacts: readonly SubagentCommit[] = [], trashSessions: readonly TrashedSessionRecord[] = []): readonly string[] {
   if (panel === "permissions") return snapshot.pendingPermissions.map(item => `${item.requestId} · ${item.toolName} · ${item.riskLevel} · ${item.reason}`);
   if (panel === "sessions") return sessions.map(item => `${item.title ?? "（未命名）"} · ${item.id} · ${item.status} · ${item.permissionMode} · ${item.updatedAt}`);
+  if (panel === "trash") return trashSessions.map(item => `${item.snapshot.title ?? "（未命名）"} · ${item.snapshot.id} · 删除于 ${item.deletedAt}`);
   if (panel === "diffs") return diffs.map(item => `${item.id} · ${item.status} · ${item.changes.map(change => change.path).join(", ")}`);
   if (panel === "checkpoints") return checkpoints.map(item => `${item.id} · ${item.status} · ${item.files.map(file => file.path).join(", ")}`);
   if (panel === "context") return [`上下文窗口：${snapshot.usage.inputTokens} / 配置窗口见 /doctor`];
@@ -997,7 +1168,7 @@ function overlayActions(overlay: Overlay): readonly TuiOverlayAction[] {
   if (overlay.kind === "externalAccess") return [{ label: "授权当前会话目录", value: "a" }, { label: "拒绝", value: "d" }];
   if (overlay.kind === "shell") return [{ label: "确认执行", value: "a" }, { label: "取消", value: "d" }];
   if (overlay.kind === "planReview") return [{ label: "接受 Plan", value: "a" }, { label: "拒绝", value: "d" }];
-  if (overlay.kind === "restore") return [{ label: "确认恢复", value: "a" }, { label: "取消", value: "r" }];
+  if (overlay.kind === "restore") return [{ label: "文件和对话", value: "a" }, { label: "仅文件", value: "f" }, { label: "仅对话", value: "c" }, { label: "取消", value: "r" }];
   if (overlay.kind === "queueChoice") return [
     { label: "中断并发送", value: "i" },
     { label: "引导当前运行", value: "g" },

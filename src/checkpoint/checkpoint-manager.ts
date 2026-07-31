@@ -3,6 +3,8 @@ import { join } from "node:path";
 import type { IdGenerator } from "../agent/id-generator.js";
 import type { WorkspaceFileSnapshot } from "../workspace/types.js";
 import type { WorkspaceRegistry } from "../workspace/workspace-service.js";
+import type { SessionStore } from "../storage/session-store.js";
+import type { AgentSessionSnapshot } from "../agent/types.js";
 
 export interface CheckpointFileEntry {
   readonly path: string;
@@ -12,6 +14,7 @@ export interface CheckpointFileEntry {
 }
 
 export interface CheckpointRecord {
+  readonly schemaVersion?: 1;
   readonly id: string;
   readonly workspaceId: string;
   readonly sessionId: string;
@@ -19,6 +22,8 @@ export interface CheckpointRecord {
   readonly createdAt: string;
   readonly status: "active" | "restored";
   readonly files: readonly CheckpointFileEntry[];
+  readonly sessionSnapshot?: AgentSessionSnapshot;
+  readonly conversationBranchSessionId?: string;
 }
 
 export interface CreateCheckpointInput {
@@ -98,6 +103,7 @@ export class CheckpointManager {
     private readonly store: CheckpointStore,
     private readonly ids: IdGenerator,
     private readonly workspaces: WorkspaceRegistry,
+    private readonly sessions?: SessionStore,
   ) {}
 
   public async create(input: CreateCheckpointInput): Promise<CheckpointRecord> {
@@ -109,7 +115,9 @@ export class CheckpointManager {
       throw new Error("Checkpoint 不能包含重复文件");
     }
 
+    const sessionSnapshot = this.sessions === undefined ? undefined : await this.sessions.load(input.sessionId);
     const record: CheckpointRecord = {
+      schemaVersion: 1,
       id: this.ids.next("checkpoint"),
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -122,6 +130,7 @@ export class CheckpointManager {
         expectedAfterSha256: null,
         afterContent: null,
       })),
+      ...(sessionSnapshot === undefined ? {} : { sessionSnapshot }),
     };
     await this.store.save(record);
     return record;
@@ -206,6 +215,14 @@ export class CheckpointManager {
     return this.store.list(workspaceId);
   }
 
+  /** 将对话分支关系写回 Checkpoint，供重启后的恢复面板显示来源。 */
+  public async recordConversationBranch(checkpointId: string, branchSessionId: string): Promise<CheckpointRecord> {
+    const record = await this.require(checkpointId);
+    const updated: CheckpointRecord = { ...record, conversationBranchSessionId: branchSessionId };
+    await this.store.save(updated);
+    return updated;
+  }
+
   private async require(id: string): Promise<CheckpointRecord> {
     const record = await this.store.load(id);
     if (record === undefined) {
@@ -236,8 +253,8 @@ function validateCheckpointRecord(value: unknown): CheckpointRecord {
   if (!isRecord(value) || typeof value.id !== "string" || typeof value.workspaceId !== "string"
     || typeof value.sessionId !== "string" || typeof value.proposalId !== "string"
     || typeof value.createdAt !== "string" || !["active", "restored"].includes(String(value.status))
-    || !Array.isArray(value.files)) {
-    throw new Error("Checkpoint 文件结构无效");
+    || value.schemaVersion !== 1 || !Array.isArray(value.files)) {
+    throw new Error("Checkpoint 文件结构无效或 schemaVersion 不受支持");
   }
   for (const file of value.files) {
     if (!isRecord(file) || typeof file.path !== "string" || !isRecord(file.before)

@@ -1,5 +1,6 @@
 export interface TuiScreenLayoutInput {
   readonly rows: number;
+  readonly columns?: number;
   readonly headerRows: number;
   readonly suggestionRows: number;
   readonly inputRows?: number;
@@ -14,6 +15,11 @@ export interface TuiScreenLayout {
   readonly timelineBoxHeight: number;
   readonly suggestionTopRow: number;
   readonly overlayHeight: number;
+  /** Zero-based coordinates of the bordered timeline content area. */
+  readonly timelineContentTopRow: number;
+  readonly timelineContentBottomRow: number;
+  readonly timelineContentLeftColumn: number;
+  readonly timelineContentRightColumn: number;
 }
 
 /**
@@ -39,5 +45,9 @@ export function calculateTuiScreenLayout(input: TuiScreenLayoutInput): TuiScreen
     timelineBoxHeight: timelinePageSize + timelineBorderRows,
     suggestionTopRow: Math.max(0, rootHeight - footerRows - suggestionRows),
     overlayHeight: rootHeight,
+    timelineContentTopRow: headerRows + 1,
+    timelineContentBottomRow: Math.max(headerRows + 1, headerRows + timelinePageSize),
+    timelineContentLeftColumn: 4,
+    timelineContentRightColumn: Math.max(4, Math.floor(input.columns ?? 80) - 3),
   };
 }

@@ -103,14 +103,15 @@ export class TuiApplicationLifecycle {
   private enableMouseTracking(): void {
     if (this.mouseTrackingEnabled || this.stdout.isTTY !== true) return;
     this.mouseTrackingEnabled = true;
-    // 1002 reports motion while a button is held, which is required for
-    // left-button text selection. 1006 keeps coordinates unambiguous.
-    this.stdout.write("\u001b[?1002h\u001b[?1006h");
+    // 1000 reports button presses, 1002 adds drag motion and 1006 uses
+    // unambiguous SGR coordinates. Keep the modes paired so terminal state is
+    // restored even when shutdown follows an exception.
+    this.stdout.write("\u001b[?1000h\u001b[?1002h\u001b[?1006h");
   }
 
   private disableMouseTracking(): void {
     if (!this.mouseTrackingEnabled) return;
     this.mouseTrackingEnabled = false;
-    this.stdout.write("\u001b[?1002l\u001b[?1006l");
+    this.stdout.write("\u001b[?1006l\u001b[?1002l\u001b[?1000l");
   }
 }

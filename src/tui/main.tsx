@@ -18,7 +18,6 @@ async function main(): Promise<void> {
   const runtime = await createTuiRuntime(configuration, workspaceRoot);
   const controller = new TuiController(runtime, configuration, (nextConfiguration, path) => createTuiRuntime(nextConfiguration, path));
   const lifecycle = new TuiApplicationLifecycle(controller);
-  lifecycle.install();
   try {
     const app = render(
       <TuiApp
@@ -28,6 +27,10 @@ async function main(): Promise<void> {
       { alternateScreen: true, exitOnCtrlC: false },
     );
     lifecycle.setRenderer(app);
+    // Enable terminal modes only after Ink has installed its renderer. This
+    // prevents the first alternate-screen frame from consuming the setup
+    // sequence and leaves a single lifecycle owner for cleanup.
+    lifecycle.install();
     await app.waitUntilExit();
   } finally {
     await lifecycle.shutdown();

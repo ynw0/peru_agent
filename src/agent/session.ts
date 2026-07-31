@@ -29,6 +29,7 @@ export class AgentSession {
   private pendingInputs: AgentQueuedInput[] = [];
   private title: string | undefined;
   private compaction: { compactedAt: string; count: number } | undefined;
+  private branchSource: { sessionId: string; checkpointId: string } | undefined;
 
   public readonly createdAt: string;
 
@@ -64,6 +65,7 @@ export class AgentSession {
     session.pendingInputs = [...(snapshot.pendingInputs ?? [])].map(item => ({ ...item, input: { ...item.input, ...(item.input.attachments === undefined ? {} : { attachments: item.input.attachments.map(attachment => ({ ...attachment })) }) } }));
     session.title = snapshot.title;
     session.compaction = snapshot.compaction === undefined ? undefined : { ...snapshot.compaction };
+    session.branchSource = snapshot.branchSource === undefined ? undefined : { ...snapshot.branchSource };
     return session;
   }
 
@@ -113,6 +115,7 @@ export class AgentSession {
 
   public incrementToolCallCount(count = 1): void { this.toolCallCount += count; this.touch(); }
   public rename(title: string): void { this.title = title.trim() === "" ? undefined : title.trim(); this.touch(); }
+  public setBranchSource(source: { readonly sessionId: string; readonly checkpointId: string }): void { this.branchSource = { ...source }; this.touch(); }
   public enqueueInput(id: string, input: AgentUserInput, priority: AgentQueuePriority): void {
     this.pendingInputs.push({ id, priority, input, createdAt: nowIso() });
     this.touch();
@@ -199,6 +202,7 @@ export class AgentSession {
       },
       ...(this.compaction === undefined ? {} : { compaction: { ...this.compaction } }),
       pendingInputs: this.getPendingInputs(),
+      ...(this.branchSource === undefined ? {} : { branchSource: { ...this.branchSource } }),
     };
   }
 

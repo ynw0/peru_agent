@@ -9,12 +9,14 @@ import {
   type TuiHealthReport,
   writeTuiConfiguration,
 } from "./config.js";
-import type { TuiRuntime, TuiToolResultDetail, TuiContextReport } from "./runtime.js";
+import type { TuiRuntime, TuiToolResultDetail, TuiContextReport, CheckpointRestoreScope } from "./runtime.js";
 import type { PlanRecord } from "../plan/plan-manager.js";
 import type { CreatePlanInput } from "../plan/plan-manager.js";
 import type { SubagentTaskRecord } from "../subagent/types.js";
 import type { SubagentTaskRequest } from "../subagent/types.js";
 import type { SubagentCommit } from "../subagent/types.js";
+import type { TrashedSessionRecord } from "../storage/session-store.js";
+import type { TuiTranscriptEntry } from "./transcript.js";
 
 export interface TuiControllerState {
   readonly runtime: TuiRuntime;
@@ -164,6 +166,10 @@ export class TuiController {
     this.setStatus(`已恢复会话：${session.id}（${modeLabel(session.permissionMode)}）`);
     return session;
   }
+  public trashSession(sessionId: string): Promise<TrashedSessionRecord> { return this.runtime.trashSession(sessionId); }
+  public listTrash(): Promise<readonly TrashedSessionRecord[]> { return this.runtime.listTrash(); }
+  public restoreTrash(sessionId: string): Promise<AgentSessionSnapshot> { return this.runtime.restoreTrash(sessionId); }
+  public deleteTrash(sessionId: string): Promise<boolean> { return this.runtime.deleteTrash(sessionId); }
 
   public switchWorkspace(path: string): Promise<void> {
     this.assertIdle("运行期间不能切换工作区，请先按 Ctrl+C");
@@ -216,10 +222,11 @@ export class TuiController {
   public getDiff(proposalId: string): DiffProposal | undefined { return this.runtime.getDiff(proposalId); }
   public listSessions(): Promise<readonly AgentSessionSnapshot[]> { return this.runtime.listSessions(); }
   public listCheckpoints(): Promise<readonly CheckpointRecord[]> { return this.runtime.listCheckpoints(); }
-  public restoreCheckpoint(checkpointId: string): Promise<CheckpointRecord> { return this.runtime.restoreCheckpoint(checkpointId); }
+  public restoreCheckpoint(checkpointId: string, scope?: CheckpointRestoreScope): Promise<CheckpointRecord> { return this.runtime.restoreCheckpoint(checkpointId, scope); }
   public listTools(): readonly ToolManifest[] { return this.runtime.listTools(); }
   public getToolResult(toolCallId: string): Promise<TuiToolResultDetail | undefined> { return this.runtime.getToolResult(toolCallId); }
   public getContextReport(): Promise<TuiContextReport> { return this.runtime.getContextReport(); }
+  public listTranscriptEntries(): Promise<readonly TuiTranscriptEntry[]> { return this.runtime.listTranscriptEntries(); }
   public listPlans(): readonly PlanRecord[] { return this.runtime.listPlans?.() ?? []; }
   public resolvePlan(planId: string, decision: "approved" | "rejected"): Promise<PlanRecord> {
     if (this.runtime.resolvePlan === undefined) return Promise.reject(new Error("当前 Runtime 未启用 Plan"));

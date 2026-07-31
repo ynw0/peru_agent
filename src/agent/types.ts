@@ -110,6 +110,7 @@ export interface AgentSessionSnapshot {
   };
   readonly compaction?: { readonly compactedAt: string; readonly count: number };
   readonly pendingInputs?: readonly AgentQueuedInput[];
+  readonly branchSource?: { readonly sessionId: string; readonly checkpointId: string };
 }
 
 // 每次运行都有硬限制，达到限制后必须明确失败，不能静默继续或自动换模型。

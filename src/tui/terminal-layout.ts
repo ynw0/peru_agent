@@ -18,6 +18,26 @@ export interface TuiTimelineEntry {
   readonly tool?: ToolActivityView;
 }
 
+export interface TuiCollapsedToolSummary {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly state: ToolActivityView["state"];
+  readonly summary: string;
+  readonly entry: TuiTimelineEntry;
+}
+
+export interface TuiTurnAgentContent {
+  readonly text: string;
+  readonly toolSummaries: readonly TuiCollapsedToolSummary[];
+  readonly toolEntries: readonly TuiTimelineEntry[];
+}
+
+export interface TuiConversationTurn {
+  readonly id: string;
+  readonly user?: TuiTimelineEntry;
+  readonly agent: TuiTurnAgentContent;
+}
+
 export interface TuiRenderedLine {
   readonly entryId: string;
   readonly kind: TuiTimelineEntry["kind"];
@@ -67,26 +87,105 @@ export function buildTuiTimeline(
     }
   }
 
-  // A streaming message may not have reached SessionStore yet. Preserve its
-  // current position at the tail until the persisted message is available.
+  // Only the active run may contribute a message that has not reached
+  // SessionStore yet. Completed/unrelated Workbench messages are stale
+  // projections and must never be appended to the current answer.
   for (const message of snapshot.chatMessages) {
     if (seen.has(message.id)) continue;
+    if (
+      message.role !== "assistant"
+      || message.state !== "streaming"
+      || snapshot.activeRunId === undefined
+      || message.runId !== snapshot.activeRunId
+    ) continue;
     entries.push({
       id: message.id,
       kind: "message",
       role: message.role,
-      label: message.role === "user" ? "你" : "Agent",
+      label: "Agent",
       content: message.content || "…",
     });
     seen.add(message.id);
   }
 
-  // A tool can be requested before the assistant message is persisted. Keep
-  // it visible rather than dropping a live permission/progress state.
+  // A tool can be requested before the active assistant message is persisted.
+  // Keep only those live tools while a run is active; historical leftovers
+  // would otherwise be merged into the next Conversation Turn.
+  const hasActiveStreamingAssistant = snapshot.chatMessages.some(
+    message => message.role === "assistant"
+      && message.state === "streaming"
+      && snapshot.activeRunId !== undefined
+      && message.runId === snapshot.activeRunId,
+  );
+  if (!hasActiveStreamingAssistant) return entries;
   for (const tool of snapshot.tools) {
     if (seen.has(tool.toolCallId)) continue;
     entries.push(toolEntry(tool.toolCallId, tool));
     seen.add(tool.toolCallId);
+  }
+  return entries;
+}
+
+/** 将原始消息流折叠成“用户问题 → Agent 完整回答”的 Turn。 */
+export function buildTuiConversationTurns(
+  session: AgentSessionSnapshot,
+  snapshot: WorkbenchSnapshot,
+): readonly TuiConversationTurn[] {
+  const entries = buildTuiTimeline(session, snapshot);
+  const turns: TuiConversationTurn[] = [];
+  let current: { id: string; user?: TuiTimelineEntry; assistants: string[]; tools: TuiTimelineEntry[] } | undefined;
+  const flush = (): void => {
+    if (current === undefined) return;
+    const toolSummaries = current.tools.map(entry => {
+      const tool = entry.tool;
+      return {
+        toolCallId: entry.id.replace(/^tool:/, ""),
+        toolName: tool?.toolName ?? entry.label,
+        state: tool?.state ?? "requested",
+        summary: compactToolSummary(entry),
+        entry,
+      } satisfies TuiCollapsedToolSummary;
+    });
+    const text = [
+      ...current.assistants.filter(item => item.trim() !== ""),
+      ...(toolSummaries.length === 0 ? [] : [`工具：${toolSummaries.map(item => `${item.toolName}（${item.state}）`).join("、")}`]),
+    ].join("\n\n") || (toolSummaries.length > 0 ? "Agent 正在处理工具结果…" : "…");
+    turns.push({
+      id: current.id,
+      ...(current.user === undefined ? {} : { user: current.user }),
+      agent: { text, toolSummaries, toolEntries: current.tools },
+    });
+    current = undefined;
+  };
+  for (const entry of entries) {
+    if (entry.kind === "message" && entry.role === "user") {
+      flush();
+      current = { id: entry.id, user: entry, assistants: [], tools: [] };
+      continue;
+    }
+    if (current === undefined) current = { id: entry.id, assistants: [], tools: [] };
+    if (entry.kind === "tool") current.tools.push(entry);
+    else if (entry.role === "assistant" || entry.role === "summary") current.assistants.push(entry.content);
+  }
+  flush();
+  return turns;
+}
+
+export function flattenTuiConversationTurns(
+  turns: readonly TuiConversationTurn[],
+  verbose = false,
+): readonly TuiTimelineEntry[] {
+  const entries: TuiTimelineEntry[] = [];
+  for (const turn of turns) {
+    if (turn.user !== undefined) entries.push(turn.user);
+    entries.push({
+      id: `agent:${turn.id}`,
+      kind: "message",
+      role: "assistant",
+      label: "Agent",
+      content: turn.agent.text,
+    });
+    if (verbose) entries.push(...turn.agent.toolEntries);
   }
   return entries;
 }
@@ -173,8 +272,21 @@ function messageEntry(
     kind: "message",
     role: message.role,
     label: message.role === "user" ? "你" : message.role === "summary" ? "会话摘要" : "Agent",
-    content: live?.content || (message.role === "user" && message.displayContent !== undefined ? message.displayContent : message.content) || "…",
+    content: message.role === "user"
+      ? stripLegacyAuthorizationNotice(message.displayContent ?? live?.content ?? message.content ?? "…")
+      : live?.content || message.content || "…",
   };
+}
+
+function stripLegacyAuthorizationNotice(value: string): string {
+  return value.replace(/^\[Peru Agent 授权提示[：:][^\]]*\]\s*/u, "");
+}
+
+function compactToolSummary(entry: TuiTimelineEntry): string {
+  const tool = entry.tool;
+  if (tool === undefined) return `${entry.label}：等待结果`;
+  const preview = tool.outputPreview?.replace(/\r?\n/g, " ").trim();
+  return `${tool.toolName} · ${tool.state}${preview === undefined || preview === "" ? "" : ` · ${preview.slice(0, 160)}`}`;
 }
 
 function toolEntry(

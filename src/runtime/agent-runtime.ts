@@ -7,7 +7,7 @@ import { PermissionCoordinator } from "../agent/permission-coordinator.js";
 import { AgentSession } from "../agent/session.js";
 import type { AgentRunOptions, AgentSessionSnapshot } from "../agent/types.js";
 import type { ModelProvider } from "../model/types.js";
-import type { SessionStore } from "../storage/session-store.js";
+import type { SessionStore, TrashedSessionRecord } from "../storage/session-store.js";
 import type { ToolRegistry } from "../tool-runtime.js";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute } from "node:path";
@@ -225,6 +225,31 @@ export class AgentRuntime {
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
+  public async trashSession(sessionId: string): Promise<TrashedSessionRecord> {
+    const session = await this.requireSession(sessionId);
+    if (session.getStatus() === "running" || session.getStatus() === "awaitingPermission") throw new AgentError("RUN_ALREADY_ACTIVE", "运行期间不能删除会话");
+    const record = await this.dependencies.sessions.trash(session.snapshot());
+    this.loadedSessions.delete(sessionId);
+    this.dependencies.permissions.clearSession(sessionId);
+    return record;
+  }
+
+  public listTrashedSessions(): Promise<readonly TrashedSessionRecord[]> { return this.dependencies.sessions.listTrash(); }
+
+  public async restoreTrashedSession(sessionId: string): Promise<AgentSessionSnapshot> {
+    const snapshot = await this.dependencies.sessions.restoreTrash(sessionId);
+    if (snapshot === undefined) throw new AgentError("SESSION_NOT_FOUND", `回收区不存在会话：${sessionId}`);
+    const restored = AgentSession.restore(snapshot);
+    this.loadedSessions.set(restored.id, restored);
+    return restored.snapshot();
+  }
+
+  public deleteTrashedSession(sessionId: string): Promise<boolean> { return this.dependencies.sessions.deletePermanently(sessionId); }
+
+  public purgeTrashedSessions(before = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()): Promise<number> {
+    return this.dependencies.sessions.purgeExpired(before);
+  }
+
   public listEvents(sessionId: string): Promise<readonly JournalEntry[]> {
     return this.dependencies.journal.list(sessionId);
   }
@@ -239,6 +264,18 @@ export class AgentRuntime {
     const created = await this.createSession(source.workspaceId, source.permissionMode);
     const started = await this.startSession(created.id, { content: lastUserMessage.content, ...(lastUserMessage.displayContent === undefined ? {} : { displayContent: lastUserMessage.displayContent }), ...(lastUserMessage.attachments === undefined ? {} : { attachments: lastUserMessage.attachments }) });
     return { sessionId: created.id, runId: started.runId };
+  }
+
+  public async createBranchFromSession(sourceSnapshot: AgentSessionSnapshot, checkpointId: string): Promise<AgentSessionSnapshot> {
+    const created = await this.createSession(sourceSnapshot.workspaceId, sourceSnapshot.permissionMode);
+    const branch = await this.requireSession(created.id);
+    for (const message of sourceSnapshot.messages) branch.appendMessage(structuredClone(message));
+    branch.addUsage(sourceSnapshot.usage.inputTokens, sourceSnapshot.usage.outputTokens);
+    branch.setContextTokens(sourceSnapshot.usage.contextTokens ?? sourceSnapshot.usage.lastInputTokens ?? 0);
+    branch.rename(`${sourceSnapshot.title ?? "Session"}（Checkpoint 分支）`);
+    branch.setBranchSource({ sessionId: sourceSnapshot.id, checkpointId });
+    await this.dependencies.sessions.save(branch.snapshot());
+    return branch.snapshot();
   }
 
   public async getSession(sessionId: string): Promise<AgentSessionSnapshot> {

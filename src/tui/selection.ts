@@ -18,7 +18,7 @@ export function anchorAtMouse(
   event: TuiMouseEvent,
   lines: readonly TuiRenderedLine[],
   timelineTopRow: number,
-  contentLeftColumn = 2,
+  contentLeftColumn = 4,
 ): TuiSelectionAnchor | undefined {
   if (event.y < timelineTopRow || event.y >= timelineTopRow + lines.length) return undefined;
   const line = lines[event.y - timelineTopRow];
@@ -49,8 +49,9 @@ export function selectionForMouse(
   event: TuiMouseEvent,
   lines: readonly TuiRenderedLine[],
   timelineTopRow: number,
+  contentLeftColumn = 4,
 ): TuiTextSelection | undefined {
-  const anchor = anchorAtMouse(event, lines, timelineTopRow);
+  const anchor = anchorAtMouse(event, lines, timelineTopRow, contentLeftColumn);
   if (anchor === undefined) return current;
   if (event.kind === "press" && event.button === "left") return { start: anchor, end: anchor };
   if ((event.kind === "move" || event.kind === "release") && current !== undefined) {

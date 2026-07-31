@@ -58,11 +58,9 @@ export async function buildAuthorizedExternalUserInput(
     if (total > 512 * 1024) throw new Error("附件总大小超过 512 KiB");
     attachments.push({ kind: "external-file", path: absolute, content: text, sha256: snapshot.sha256 ?? sha256Text(text), byteLength: bytes, mediaType: "text/plain" });
   }
-  const grants = access.list(sessionId).map(item => item.directory);
-  const grantNotice = grants.length === 0 ? "" : `\n\n[Peru Agent 授权提示：本会话可通过文件 Tool 访问以下目录：${grants.join("、")}]`;
   return attachments.length === 0
-    ? { content: `${content}${grantNotice}`, displayContent: content }
-    : { content: `${content}${grantNotice}`, displayContent: content, attachments };
+    ? { content, displayContent: content }
+    : { content, displayContent: content, attachments };
 }
 
 function mediaTypeFor(extension: string): string {
