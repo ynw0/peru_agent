@@ -4,6 +4,7 @@ import type { Capability } from "../agent-protocol.js";
 import type { SubagentReviewPolicy, SubagentRole } from "../subagent/types.js";
 import type { CreatePlanInput } from "../plan/plan-manager.js";
 import type { TuiPlanEditorState, TuiTaskEditorState } from "./orchestration-state.js";
+import { parseTuiMouseInput } from "./mouse.js";
 
 const PLAN_FIELDS = ["title", "summary", "confidence", "affectedFiles", "stepTitle", "stepDescription", "stepFiles", "stepCapabilities"] as const;
 const TASK_FIELDS = ["role", "instruction", "allowedPaths", "planId", "planStepId", "reviewPolicy"] as const;
@@ -15,6 +16,7 @@ export function TuiPlanEditor({ instruction, onSubmit, onCancel }: { readonly in
   const [buffer, setBuffer] = useState(() => planFieldValue(state, PLAN_FIELDS[0], 0));
   const commit = (value: string): TuiPlanEditorState => updatePlanField(state, PLAN_FIELDS[fieldIndex] ?? "title", value, stepIndex);
   useInput((value, key) => {
+    if (parseTuiMouseInput(value) !== undefined) return;
     if (key.escape) { onCancel(); return; }
     if (key.ctrl && value.toLocaleLowerCase() === "n") { const next = { ...state, steps: [...state.steps, { title: "", description: "", affectedPaths: ["."], capabilities: ["workspace.read"] }] }; setState(next); setStepIndex(next.steps.length - 1); setFieldIndex(4); setBuffer(""); return; }
     if (key.ctrl && value.toLocaleLowerCase() === "w" && state.steps.length > 1) { const next = { ...state, steps: state.steps.filter((_, index) => index !== stepIndex) }; setState(next); setStepIndex(Math.min(stepIndex, next.steps.length - 1)); return; }
@@ -42,6 +44,7 @@ export function TuiTaskEditor({ instruction, onSubmit, onCancel }: { readonly in
   const [buffer, setBuffer] = useState(() => fieldValue(state, TASK_FIELDS[0]));
   const commit = (value: string): TuiTaskEditorState => updateTaskField(state, TASK_FIELDS[fieldIndex] ?? "instruction", value);
   useInput((value, key) => {
+    if (parseTuiMouseInput(value) !== undefined) return;
     if (key.escape) { onCancel(); return; }
     if (value === " " && (TASK_FIELDS[fieldIndex] === "role" || TASK_FIELDS[fieldIndex] === "reviewPolicy")) { const next = toggleTaskEnum(state, TASK_FIELDS[fieldIndex] ?? "role"); setState(next); setBuffer(fieldValue(next, TASK_FIELDS[fieldIndex] ?? "role")); return; }
     if (key.tab || key.downArrow || key.return) {

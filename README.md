@@ -26,7 +26,7 @@
 
 日常输入支持 `/` 命令补全、`@文件` 附件、Shift+Enter/Alt+Enter 多行、Ctrl+R 历史和 Ctrl+O Verbose Transcript。会话可用 `/rename`、`/resume`、`/export`、`/compact`、`/context`、`/usage`、`/queue` 管理；运行中提交会提示立即中断、引导当前运行或排队下一轮。
 
-运行中可使用 `/config` 在当前 Ink 画面内编辑并验证模型、Chat Completions 路径、API Key 和默认权限/网络模式；Broker 路径自动解析，验证或切换失败会保留原会话。`/doctor` 显示当前工作区、配置、数据目录、精确模型 ID 和 Broker 健康状态，不显示密钥。已完成对话通过 Ink `Static` 追加到普通终端缓冲区，可使用终端原生鼠标滚轮浏览、左键拖选和 `Ctrl+Shift+C` 复制；正在运行的最后一个 Turn 保持动态渲染，`PageUp/PageDown`、`Ctrl+Home/Ctrl+End` 继续控制当前应用视图和详情面板。输入框支持 Home/End、Delete、上下历史、粘贴、`Ctrl+U` 清行、`Ctrl+W` 删词和 `Ctrl+K` 删除到行尾。主时间线按真实 Session 消息顺序显示，Tool 默认四行摘要，完整脚本与结果在详情面板中查看。
+运行中可使用 `/config` 在当前 Ink 画面内编辑并验证模型、Chat Completions 路径、API Key 和默认权限/网络模式；Broker 路径自动解析，验证或切换失败会保留原会话。`/doctor` 显示当前工作区、配置、数据目录、精确模型 ID 和 Broker 健康状态，不显示密钥。对话支持鼠标滚轮、`PageUp/PageDown`、`Ctrl+Home/Ctrl+End` 按终端行浏览，向上浏览时新输出会显示未读行数；输入框支持 Home/End、Delete、上下历史、粘贴、`Ctrl+U` 清行、`Ctrl+W` 删词和 `Ctrl+K` 删除到行尾。主时间线按真实 Session 消息顺序显示，Tool 默认四行摘要，完整脚本与结果在详情面板中查看。
 
 - Phase 0：安全规则、协议和 TypeScript strict 基线；
 - Phase 1：独立产品身份、Typed IPC 和 Workbench 容器；
