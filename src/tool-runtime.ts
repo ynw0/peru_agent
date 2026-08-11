@@ -1,5 +1,6 @@
 import type { Capability, ToolRiskLevel } from "./agent-protocol.js";
 import type { JsonSchema, ModelToolDefinition } from "./model/types.js";
+import type { ToolPermissionRequest } from "./permission-rules.js";
 
 // Tool Manifest 是安全审核的基础，实际行为不能超出这里声明的能力。
 export interface ToolManifest {
@@ -47,10 +48,26 @@ export interface Tool<TInput, TOutput> {
   readonly manifest: ToolManifest;
   validate(input: unknown): TInput;
   inspect(input: TInput, context?: ToolInspectionContext): Promise<ToolInspection> | ToolInspection;
+  // 与 OpenCode 一致：Tool 自己声明 permission、匹配 patterns 与 always 建议；权限服务只负责规则求值与等待用户。
+  permissions(input: TInput, inspection: ToolInspection): readonly ToolPermissionRequest[];
   execute(input: TInput, context: ToolExecutionContext): Promise<TOutput>;
   // inspect 产生临时安全状态时必须显式释放，权限拒绝和执行失败也会调用。
   releaseInspection?(input: TInput, context: ToolInspectionContext): Promise<void> | void;
   serializeOutput(output: TOutput): string;
+}
+
+
+export function noToolPermissions(): readonly ToolPermissionRequest[] { return []; }
+
+export function toolPermission(
+  permission: string,
+  patterns: readonly string[],
+  metadata: Readonly<Record<string, unknown>> = {},
+  always: readonly string[] = ["*"],
+): readonly ToolPermissionRequest[] {
+  const clean = patterns.filter(pattern => pattern.trim() !== "");
+  if (permission.trim() === "" || clean.length === 0) throw new Error("Tool permission 必须包含 permission 和至少一个 pattern");
+  return [{ permission, patterns: clean, always: [...always], metadata }];
 }
 
 // 自动晋级判断结果会说明原因，便于审计和 UI 展示。

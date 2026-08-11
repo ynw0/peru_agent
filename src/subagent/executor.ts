@@ -70,10 +70,10 @@ export class DeferredAgentRuntimeSubagentExecutor implements SubagentExecutor {
 }
 
 function roleToolNames(role: SubagentTaskRecord["role"]): readonly string[] {
-  const read = ["Read", "Glob", "Grep"];
-  if (role === "implementer") return [...read, "Write", "Edit", "ApplyPatch", "FileDiff"];
-  if (role === "reviewer") return [...read, "FileDiff", "GateReport"];
-  if (role === "tester") return [...read, "PowerShell", "GateReport"];
+  const read = ["read", "glob", "grep"];
+  if (role === "implementer") return [...read, "write", "edit", "apply_patch", "file_diff"];
+  if (role === "reviewer") return [...read, "file_diff", "GateReport"];
+  if (role === "tester") return [...read, "bash", "GateReport"];
   return read;
 }
 

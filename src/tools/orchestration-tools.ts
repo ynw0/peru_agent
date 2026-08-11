@@ -1,4 +1,4 @@
-import type { Tool } from "../tool-runtime.js";
+import { noToolPermissions, toolPermission, type Tool } from "../tool-runtime.js";
 import type { Capability } from "../agent-protocol.js";
 import type { PlanManager } from "../plan/plan-manager.js";
 import type { PlanReviewCoordinator } from "../plan/plan-review-coordinator.js";
@@ -6,7 +6,7 @@ import type { SubagentRole, SubagentReviewPolicy, SubagentTaskRecord } from "../
 import { SubagentScheduler } from "../subagent/scheduler.js";
 import { GateReportStore } from "../orchestration/gate-report-store.js";
 
-const READ_TOOLS = ["Read", "Glob", "Grep"] as const;
+const READ_TOOLS = ["read", "glob", "grep"] as const;
 const ROLE_CAPS: Readonly<Record<SubagentRole, readonly Capability[]>> = {
   planner: ["workspace.read"], explorer: ["workspace.read"], reviewer: ["workspace.read"],
   tester: ["workspace.read", "process.execute"],
@@ -27,6 +27,7 @@ export function createOrchestrationTools(input: { plans: PlanManager; planReview
     manifest: { name: "PlanCreate", version: "1.0.0", description: "创建并等待用户审核一个实施计划", riskLevel: "pure-compute", capabilities: [], generated: false },
     validate: value => value,
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }),
+    permissions: noToolPermissions,
     execute: async (value, context) => {
       const r = record(value);
       const rawSteps = r.steps;
@@ -41,12 +42,14 @@ export function createOrchestrationTools(input: { plans: PlanManager; planReview
     manifest: { name: "PlanList", version: "1.0.0", description: "列出当前会话 Plan", riskLevel: "pure-compute", capabilities: [], generated: false },
     validate: value => value,
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }),
+    permissions: noToolPermissions,
     execute: async () => input.plans.list(sessionId()), serializeOutput: output => JSON.stringify(output),
   };
   const dispatch: Tool<unknown, unknown> = {
-    manifest: { name: "SubagentDispatch", version: "1.0.0", description: "派发隔离子 Agent 任务", riskLevel: "pure-compute", capabilities: [], generated: false },
+    manifest: { name: "task", version: "1.0.0", description: "派发隔离子 Agent 任务", riskLevel: "pure-compute", capabilities: [], generated: false },
     validate: value => value,
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }),
+    permissions: value => toolPermission("task", [role(record(value).role)], { instruction: stringValue(record(value), "instruction") }),
     execute: async (value) => {
       const r = record(value); const selectedRole = role(r.role); const paths = stringArray(r, "allowedPaths", ["."]); const writable = stringArray(r, "writablePaths");
       const reviewPolicy = r.reviewPolicy;
@@ -58,14 +61,15 @@ export function createOrchestrationTools(input: { plans: PlanManager; planReview
     }, serializeOutput: output => JSON.stringify(output),
   };
   const list: Tool<unknown, unknown> = {
-    manifest: { name: "SubagentList", version: "1.0.0", description: "列出子 Agent 任务", riskLevel: "pure-compute", capabilities: [], generated: false }, validate: value => value, inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }), execute: async () => input.scheduler.list(sessionId()), serializeOutput: output => JSON.stringify(output),
+    manifest: { name: "SubagentList", version: "1.0.0", description: "列出子 Agent 任务", riskLevel: "pure-compute", capabilities: [], generated: false }, validate: value => value, inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }), permissions: noToolPermissions, execute: async () => input.scheduler.list(sessionId()), serializeOutput: output => JSON.stringify(output),
   };
-  const wait: Tool<unknown, unknown> = { manifest: { name: "SubagentWait", version: "1.0.0", description: "等待子 Agent 任务稳定边界", riskLevel: "pure-compute", capabilities: [], generated: false }, validate: value => value, inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }), execute: async value => input.scheduler.waitStable(stringValue(record(value), "taskId")), serializeOutput: output => JSON.stringify(output) };
-  const abort: Tool<unknown, unknown> = { manifest: { name: "SubagentAbort", version: "1.0.0", description: "取消子 Agent 任务", riskLevel: "pure-compute", capabilities: [], generated: false }, validate: value => value, inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }), execute: async value => input.scheduler.abort(stringValue(record(value), "taskId")), serializeOutput: output => JSON.stringify(output) };
+  const wait: Tool<unknown, unknown> = { manifest: { name: "SubagentWait", version: "1.0.0", description: "等待子 Agent 任务稳定边界", riskLevel: "pure-compute", capabilities: [], generated: false }, validate: value => value, inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }), permissions: noToolPermissions, execute: async value => input.scheduler.waitStable(stringValue(record(value), "taskId")), serializeOutput: output => JSON.stringify(output) };
+  const abort: Tool<unknown, unknown> = { manifest: { name: "SubagentAbort", version: "1.0.0", description: "取消子 Agent 任务", riskLevel: "pure-compute", capabilities: [], generated: false }, validate: value => value, inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }), permissions: noToolPermissions, execute: async value => input.scheduler.abort(stringValue(record(value), "taskId")), serializeOutput: output => JSON.stringify(output) };
   const gateReport: Tool<unknown, unknown> = {
     manifest: { name: "GateReport", version: "1.0.0", description: "提交 Reviewer/Tester 的结构化门禁结论", riskLevel: "pure-compute", capabilities: [], generated: false, visibility: "subagent" },
     validate: value => value,
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }),
+    permissions: noToolPermissions,
     execute: async (value, context) => {
       const r = record(value);
       const verdict = r.verdict;

@@ -1,4 +1,4 @@
-import type { Tool } from "../tool-runtime.js";
+import { toolPermission, type Tool } from "../tool-runtime.js";
 import type { ComputerUseRuntime } from "./runtime.js";
 import type { PreparedComputerAction } from "./types.js";
 
@@ -23,6 +23,7 @@ export function createComputerUseTools(runtime: ComputerUseRuntime): readonly To
     },
     validate(value) { requireRecord(value); return {}; },
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false, reason: "检查当前 Windows 窗口列表" }),
+    permissions: () => toolPermission("computer_inspect", ["windows"], {}),
     execute: (_input, context) => runtime.listWindows(context.signal),
     serializeOutput: output => JSON.stringify(output),
   };
@@ -44,6 +45,7 @@ export function createComputerUseTools(runtime: ComputerUseRuntime): readonly To
     },
     validate(value) { const item = requireRecord(value); return { windowHandle: requireString(item, "windowHandle") }; },
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false, reason: "检查窗口 UI Tree" }),
+    permissions: input => toolPermission("computer_inspect", [`window:${input.windowHandle}`], { windowHandle: input.windowHandle }),
     execute: (input, context) => runtime.inspect(input.windowHandle, context.signal),
     serializeOutput: output => JSON.stringify(output),
   };
@@ -60,6 +62,7 @@ export function createComputerUseTools(runtime: ComputerUseRuntime): readonly To
     },
     validate: validateSnapshot,
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false, reason: "获取窗口截图证据" }),
+    permissions: input => toolPermission("computer_inspect", [`snapshot:${input.snapshotId}`], { snapshotId: input.snapshotId }),
     execute: (input, context) => runtime.screenshot(input.snapshotId, context.signal),
     serializeOutput: output => JSON.stringify(output),
   };
@@ -147,6 +150,11 @@ export function createComputerUseTools(runtime: ComputerUseRuntime): readonly To
           requestedCapabilities: ["computer.interact"],
           reason: action.reason,
         };
+      },
+      permissions(input, inspection) {
+        const record = input as Record<string, unknown>;
+        const snapshotId = typeof record.snapshotId === "string" ? record.snapshotId : "unknown";
+        return toolPermission("computer_interact", [`${name}:${snapshotId}`], { reason: inspection.reason ?? description });
       },
       async execute(_input, context) {
         const action = prepared.get(context.toolCallId);

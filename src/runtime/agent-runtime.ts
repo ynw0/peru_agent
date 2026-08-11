@@ -4,6 +4,7 @@ import type { EventJournal, JournalEntry } from "../agent/event-journal.js";
 import type { IdGenerator } from "../agent/id-generator.js";
 import { AgentLoop, type AgentLoopOptions } from "../agent/agent-loop.js";
 import { PermissionCoordinator } from "../agent/permission-coordinator.js";
+import type { PermissionReply } from "../permission-rules.js";
 import { AgentSession } from "../agent/session.js";
 import type { AgentRunOptions, AgentSessionSnapshot } from "../agent/types.js";
 import type { ModelProvider } from "../model/types.js";
@@ -207,14 +208,8 @@ export class AgentRuntime {
     return true;
   }
 
-  public clearSessionPermissionGrants(sessionId: string): void { this.dependencies.permissions.clearSession(sessionId); }
-
-  public resolvePermission(requestId: string, decision: "allow" | "deny"): boolean {
-    return this.dependencies.permissions.resolve(requestId, decision);
-  }
-
-  public resolvePermissionScope(requestId: string, scope: import("./../agent/permission-coordinator.js").PermissionGrantScope | "deny"): boolean {
-    return this.dependencies.permissions.resolveWithScope(requestId, scope);
+  public resolvePermission(requestId: string, reply: PermissionReply): boolean {
+    return this.dependencies.permissions.reply(requestId, reply);
   }
 
 
@@ -230,7 +225,6 @@ export class AgentRuntime {
     if (session.getStatus() === "running" || session.getStatus() === "awaitingPermission") throw new AgentError("RUN_ALREADY_ACTIVE", "运行期间不能删除会话");
     const record = await this.dependencies.sessions.trash(session.snapshot());
     this.loadedSessions.delete(sessionId);
-    this.dependencies.permissions.clearSession(sessionId);
     return record;
   }
 

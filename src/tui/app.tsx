@@ -561,7 +561,7 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
     if (value.toLocaleLowerCase() !== "a") return;
     const command = overlay.command;
     setOverlay(undefined);
-    try { setHome(false); await controller.sendInput(`请通过 PowerShell Tool 执行以下用户明确确认的命令：${command}`); }
+    try { setHome(false); await controller.sendInput(`请通过 bash Tool（Windows Sandbox Broker）执行以下用户明确确认的命令：${command}`); }
     catch (error: unknown) { controller.setStatus(errorMessage(error)); }
   }
 
@@ -834,10 +834,9 @@ export function TuiApp({ controller, onExit }: TuiAppProps): ReactElement {
     if (key.pageUp || key.pageDown || (key.ctrl && (key.home || key.end))) { setDetailViewport(current => reduceTuiViewport(current, key, detailLines.length, Math.max(5, rows - 8))); return; }
     if (value.toLocaleLowerCase() === "v") { setOverlay({ ...overlay, full: true }); return; }
     const decision = getTuiReviewDecision(value, key);
-    if (decision === "accept") controller.resolvePermission(request.requestId, "allow");
-    if (decision === "reject") controller.resolvePermission(request.requestId, "deny");
-    if (value.toLocaleLowerCase() === "s") controller.grantPermission(request.requestId, "session");
-    if (value.toLocaleLowerCase() === "p") controller.grantPermission(request.requestId, "project");
+    if (decision === "accept") controller.resolvePermission(request.requestId, "once");
+    if (decision === "reject") controller.resolvePermission(request.requestId, "reject");
+    if (value.toLocaleLowerCase() === "w") controller.resolvePermission(request.requestId, "always");
   }
 
   async function handleDiffKey(value: string, key: NavigationKey): Promise<void> {
@@ -973,7 +972,7 @@ function OverlayView({ overlay, controller, state, sessions, trashSessions, diff
   if (overlay.kind === "restore") return <ActionModal title={`恢复 Checkpoint ${overlay.checkpointId}`} lines={["选择恢复范围：文件和对话会创建新的分支 Session；原 Session 保持不变。"]} actions={overlayActions(overlay)} selected={actionIndex} />;
   if (overlay.kind === "queueChoice") return <ActionModal title="运行中提交" lines={["选择这条输入如何进入当前运行；Esc 取消。"]} actions={overlayActions(overlay)} selected={actionIndex} />;
   if (overlay.kind === "externalAccess") return <ActionModal title="授权访问外部目录" lines={["Agent 请求读取/提出修改以下外部路径：", ...overlay.paths]} actions={overlayActions(overlay)} selected={actionIndex} />;
-  if (overlay.kind === "shell") return <ActionModal title="确认 Shell 命令" lines={["该命令将通过 PowerShell Tool 和 Sandbox Broker 执行：", "$ " + overlay.command]} actions={overlayActions(overlay)} selected={actionIndex} />;
+  if (overlay.kind === "shell") return <ActionModal title="确认 Shell 命令" lines={["该命令将通过 bash Tool 和 Windows Sandbox Broker 执行：", "$ " + overlay.command]} actions={overlayActions(overlay)} selected={actionIndex} />;
   if (overlay.kind === "planReview") { const plan = state.snapshot.plans.find(item => item.planId === overlay.planId); return <ActionModal title="Plan 审核" lines={[`标题：${plan?.title ?? overlay.planId}`, `摘要：${plan?.summary ?? ""}`, `置信度：${plan?.confidence ?? 0}%`, `步骤：${plan?.steps.length ?? 0}`]} actions={overlayActions(overlay)} selected={actionIndex} />; }
   if (overlay.kind === "permission" || overlay.kind === "diff") {
     const effective = reduceTuiViewport(detailViewport, {}, detailLines.length, detailViewport.pageSize);
@@ -990,6 +989,8 @@ function buildDetailLines(overlay: Exclude<Overlay, { readonly kind: "panel" | "
     const command = request.commandText ?? request.reason;
     return [
       `Tool：${request.toolName}   Risk：${request.riskLevel}`,
+      `Permission：${request.permission} · Patterns：${request.patterns.join(", ") || "无"}`,
+      `Always：${request.always.join(", ") || "无"}`,
       `能力：${request.capabilities.join(", ") || "无"}`,
       `文件：${request.affectedFiles.join(", ") || "无"}`,
       `网络：${request.networkTargets.join(", ") || "无"}`,
@@ -1028,7 +1029,7 @@ function detailTitle(overlay: Exclude<Overlay, { readonly kind: "panel" | "confi
 }
 
 function detailFooter(overlay: Exclude<Overlay, { readonly kind: "panel" | "config" | "planEditor" | "taskEditor" | "artifactConfirm" | "taskStartConfirm" | "restore" | "queueChoice" | "externalAccess" | "shell" | "planReview" }>): string {
-  if (overlay.kind === "permission") return "[A] 允许一次  [S] 允许本会话  [P] 允许本项目  [D] 拒绝  [V] 查看完整内容  [Esc] 拒绝";
+  if (overlay.kind === "permission") return "[A] 允许一次  [W] 始终允许匹配项  [D] 拒绝  [V] 查看完整内容  [Esc] 拒绝";
   if (overlay.kind === "diff") return "[A] 接受并写入  [R] 拒绝  [V] 查看完整 Diff  [Esc] 拒绝";
   return "PgUp/PgDn 浏览，Esc 返回";
 }
@@ -1145,8 +1146,7 @@ function ActionModal({ title, lines, actions, selected }: { readonly title: stri
 function overlayActions(overlay: Overlay): readonly TuiOverlayAction[] {
   if (overlay.kind === "permission") return [
     { label: "允许一次", value: "a" },
-    { label: "本会话", value: "s" },
-    { label: "本项目", value: "p" },
+    { label: "始终允许", value: "w" },
     { label: "查看完整", value: "v" },
     { label: "拒绝", value: "d" },
   ];

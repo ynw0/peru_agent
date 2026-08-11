@@ -255,7 +255,7 @@ test("WorkbenchController 的权限、Plan、Diff 和 Checkpoint 操作全部经
   server.registerHandler("session.list", () => ({ sessions: [] }));
   server.registerHandler("session.events", () => ({ entries: [] }));
   server.registerHandler("permission.resolve", request => {
-    calls.push(`permission:${request.decision}`);
+    calls.push(`permission:${request.reply}`);
     return { accepted: true };
   });
   server.registerHandler("plan.resolve", request => {
@@ -289,14 +289,14 @@ test("WorkbenchController 的权限、Plan、Diff 和 Checkpoint 操作全部经
   const controller = new WorkbenchController(client, 1_000);
   controller.start();
   await controller.refresh("session-1");
-  await controller.resolvePermission("permission-1", "allow");
+  await controller.resolvePermission("permission-1", "once");
   await controller.resolvePlan("plan-1", "approved");
   await controller.acceptDiff("diff-1");
   await controller.rejectDiff("diff-2");
   await controller.restoreCheckpoint("checkpoint-1");
 
   assert.deepEqual(calls, [
-    "permission:allow",
+    "permission:once",
     "plan:approved",
     "diff:accept",
     "diff:reject",

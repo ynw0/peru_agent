@@ -70,7 +70,7 @@ export class ExternalAccessCoordinator implements WorkspaceExternalResolver {
     return [
       "当前 Session 的外部目录授权（由 PermissionCoordinator 和 WorkspaceTargetResolver 强制执行）：",
       ...grants.map(grant => `- ${grant.directory}（挂载 ID：${grant.id}）`),
-      "这些目录可使用 Read、Glob、Grep 及文档 Tool 读取；Glob/Grep 可将目录绝对路径作为 root。不要因为目录位于主工作区外而拒绝，也不要访问未列出的路径。所有写入仍必须提出 Diff 并等待用户审核。",
+      "这些目录可使用 read、glob、grep 及文档 Tool 读取；glob/grep 可将目录绝对路径作为 root。不要因为目录位于主工作区外而拒绝，也不要访问未列出的路径。所有写入仍必须提出 Diff 并等待用户审核。",
     ].join("\n");
   }
 

@@ -7,6 +7,7 @@ import type {
   ToolInspection,
   ToolInspectionContext,
 } from "../tool-runtime.js";
+import { toolPermission } from "../tool-runtime.js";
 import { normalizeWorkspacePath } from "../workspace/path-guard.js";
 import type { WorkspaceRegistry } from "../workspace/workspace-service.js";
 
@@ -75,7 +76,7 @@ export function createPowerShellTool(
 
   return {
     manifest: {
-      name: "PowerShell",
+      name: "bash",
       version: "1.0.0",
       description: "在 Windows 强沙箱中分析并执行 PowerShell 7 脚本",
       inputSchema: {
@@ -136,6 +137,15 @@ export function createPowerShellTool(
         commandText: input.script,
         sandboxRequired: true,
       };
+    },
+
+    permissions(input: PowerShellInput, inspection: ToolInspection) {
+      return toolPermission(
+        "bash",
+        [input.script],
+        { commands: inspection.commands ?? [], affectedFiles: inspection.affectedFiles, networkTargets: inspection.networkTargets ?? [] },
+        [input.script],
+      );
     },
 
     async execute(input: PowerShellInput, context: ToolExecutionContext): Promise<PowerShellExecutionResult> {

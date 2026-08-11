@@ -1,3 +1,4 @@
+import type { PermissionReply } from "../permission-rules.js";
 import type {
   AgentEvent,
   Capability,
@@ -106,7 +107,7 @@ export interface RetrySessionRequest {
 
 export interface ResolvePermissionRequest {
   readonly requestId: string;
-  readonly decision: "allow" | "deny";
+  readonly reply: PermissionReply;
 }
 
 export interface ResolvePermissionResult {

@@ -460,7 +460,7 @@ test("DiffReviewCoordinator pauses a write until the user accepts it", async () 
   const diffs = new DiffManager(workspaces, checkpoints, ids, journal, new InMemoryDiffProposalStore());
   const diffReviews = new DiffReviewCoordinator(diffs);
   const tools = createWorkspaceTools({ workspaces, diffs, checkpoints, diffReviews });
-  const write = tools.find(tool => tool.manifest.name === "Write");
+  const write = tools.find(tool => tool.manifest.name === "write");
   assert.ok(write !== undefined);
 
   const execution = write.execute(write.validate({ path: "note.txt", content: "after" }), {

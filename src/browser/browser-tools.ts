@@ -1,7 +1,7 @@
 import type { NetworkMode } from "../agent-protocol.js";
 import { EgressBroker } from "../egress/broker.js";
 import type { EgressAuthorizationLease } from "../egress/types.js";
-import type { Tool } from "../tool-runtime.js";
+import { toolPermission, type Tool } from "../tool-runtime.js";
 import { capabilityForMode } from "../web/web-tools.js";
 import { BrowserRuntime } from "./browser-runtime.js";
 import type { PreparedWebDownload, WebDownloadService } from "../web/web-download-service.js";
@@ -54,6 +54,7 @@ export function createBrowserTools(dependencies: BrowserToolDependencies): reado
         reason: `创建 ${mode} 模式的受控浏览器会话`,
       };
     },
+    permissions: input => toolPermission("browser", [`create:${input.workspaceId}`], { workspaceId: input.workspaceId, locale: input.locale }),
     execute: (input, context) => dependencies.runtime.create({
       workspaceId: input.workspaceId,
       networkMode: dependencies.getNetworkMode(),
@@ -99,6 +100,7 @@ export function createBrowserTools(dependencies: BrowserToolDependencies): reado
         reason: `浏览器导航到 ${lease.hostname}`,
       };
     },
+    permissions: (input, inspection) => toolPermission("browser", [input.url], { url: input.url, networkTargets: inspection.networkTargets ?? [] }),
     async execute(input, context) {
       const lease = navigationLeases.get(context.toolCallId);
       if (lease === undefined) throw new Error("BrowserNavigate 缺少已审核 URL");
@@ -131,6 +133,7 @@ export function createBrowserTools(dependencies: BrowserToolDependencies): reado
     },
     validate: validateSession,
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false, reason: "读取浏览器 DOM Snapshot" }),
+    permissions: input => toolPermission("browser", [`snapshot:${input.sessionId}`], { sessionId: input.sessionId }),
     execute: (input, context) => dependencies.runtime.snapshot(input.sessionId, context.signal),
     serializeOutput: output => JSON.stringify(output),
   };
@@ -147,6 +150,7 @@ export function createBrowserTools(dependencies: BrowserToolDependencies): reado
     },
     validate: validateSession,
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false, reason: "获取浏览器截图证据" }),
+    permissions: input => toolPermission("browser", [`screenshot:${input.sessionId}`], { sessionId: input.sessionId }),
     execute: (input, context) => dependencies.runtime.screenshot(input.sessionId, context.signal),
     serializeOutput: output => JSON.stringify(output),
   };
@@ -202,6 +206,7 @@ export function createBrowserTools(dependencies: BrowserToolDependencies): reado
         reason: `下载 ${prepared.lease.hostname} 到受控 Artifact 目录`,
       };
     },
+    permissions: (input, inspection) => toolPermission("browser", [input.url], { sessionId: input.sessionId, url: input.url, networkTargets: inspection.networkTargets ?? [] }),
     async execute(_input, context) {
       const prepared = preparedDownloads.get(context.toolCallId);
       if (prepared === undefined) throw new Error("BrowserDownload 缺少已审核下载授权");
@@ -230,6 +235,7 @@ export function createBrowserTools(dependencies: BrowserToolDependencies): reado
     },
     validate: validateTarget,
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false, reason: "点击已验证浏览器元素" }),
+    permissions: input => toolPermission("browser", [`click:${input.sessionId}:${input.elementId}`], { sessionId: input.sessionId, snapshotId: input.snapshotId, elementId: input.elementId }),
     execute: (input, context) => dependencies.runtime.click(input.sessionId, input, context.signal),
     serializeOutput: output => JSON.stringify(output),
   };
@@ -259,6 +265,7 @@ export function createBrowserTools(dependencies: BrowserToolDependencies): reado
       return { ...target, text: requireString(asRecord(value), "text") };
     },
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false, reason: "向已验证浏览器元素输入文本" }),
+    permissions: input => toolPermission("browser", [`type:${input.sessionId}:${input.elementId}`], { sessionId: input.sessionId, snapshotId: input.snapshotId, elementId: input.elementId }),
     execute: (input, context) => dependencies.runtime.type(input.sessionId, input, input.text, context.signal),
     serializeOutput: output => JSON.stringify(output),
   };

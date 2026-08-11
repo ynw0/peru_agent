@@ -1,7 +1,7 @@
 import type { CheckpointManager } from "../checkpoint/checkpoint-manager.js";
 import type { DiffManager } from "../diff/diff-manager.js";
 import type { DiffReviewCoordinator } from "../diff/diff-review-coordinator.js";
-import type { Tool } from "../tool-runtime.js";
+import { noToolPermissions, toolPermission, type Tool } from "../tool-runtime.js";
 import type { WorkspaceRegistry } from "../workspace/workspace-service.js";
 import type { WorkspaceTargetResolver } from "../workspace/target-resolver.js";
 
@@ -120,7 +120,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
     ?? { workspaceId: context.workspaceId, relativePath: path, workspace: dependencies.workspaces.get(context.workspaceId) };
   const readTool: Tool<PathInput, object> = {
     manifest: {
-      name: "Read",
+      name: "read",
       version: "1.0.0",
       description: "读取当前工作区或当前 Session 已授权外部目录中的 UTF-8 文本文件，并返回内容和 SHA-256",
       inputSchema: {
@@ -138,6 +138,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
       return { path: requireString(record, "path") };
     },
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("read", [input.path]),
     execute: async (input, context) => {
       const resolved = target(context, input.path);
       const snapshot = await resolved.workspace.readText(resolved.relativePath);
@@ -153,7 +154,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
 
   const writeTool: Tool<WriteInput, object> = {
     manifest: {
-      name: "Write",
+      name: "write",
       version: "1.0.0",
       description: "提出创建或完整替换一个 UTF-8 文本文件的 Diff，不直接写入磁盘",
       inputSchema: {
@@ -174,6 +175,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
       };
     },
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("edit", [input.path]),
     execute: async (input, context) => {
       const resolved = target(context, input.path);
       const proposal = await dependencies.diffs.propose({
@@ -190,7 +192,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
 
   const editTool: Tool<EditInput, object> = {
     manifest: {
-      name: "Edit",
+      name: "edit",
       version: "1.0.0",
       description: "精确替换文件中的文本并提出 Diff，不直接写入磁盘",
       inputSchema: {
@@ -218,6 +220,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
       };
     },
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("edit", [input.path]),
     execute: async (input, context) => {
       const resolved = target(context, input.path);
       const current = await resolved.workspace.readText(resolved.relativePath);
@@ -236,7 +239,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
 
   const applyPatchTool: Tool<ApplyPatchInput, object> = {
     manifest: {
-      name: "ApplyPatch",
+      name: "apply_patch",
       version: "1.0.0",
       description: "按顺序执行多个精确文本替换并提出一个 Diff，不直接写入磁盘",
       inputSchema: {
@@ -280,6 +283,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
       return { path: requireString(record, "path"), edits };
     },
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("edit", [input.path]),
     execute: async (input, context) => {
       const resolved = target(context, input.path);
       const current = await resolved.workspace.readText(resolved.relativePath);
@@ -301,7 +305,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
 
   const globTool: Tool<GlobInput, object> = {
     manifest: {
-      name: "Glob",
+      name: "glob",
       version: "1.0.0",
       description: "按 Glob 模式列出当前工作区或已授权外部目录中的文件；root 可使用已授权绝对目录",
       inputSchema: {
@@ -328,6 +332,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
       };
     },
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("glob", [input.pattern], { root: input.root ?? "." }),
     execute: async (input, context) => ({
       paths: await (input.root === undefined ? dependencies.workspaces.get(context.workspaceId) : target(context, input.root).workspace).glob(input.pattern, input.maxResults),
     }),
@@ -336,7 +341,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
 
   const grepTool: Tool<GrepInput, object> = {
     manifest: {
-      name: "Grep",
+      name: "grep",
       version: "1.0.0",
       description: "在当前工作区或已授权外部目录的 UTF-8 文本文件中搜索字符串；root 可使用已授权绝对目录",
       inputSchema: {
@@ -367,6 +372,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
       };
     },
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("grep", [input.query], { pattern: input.pattern, root: input.root ?? "." }),
     execute: async (input, context) => ({
       matches: await (input.root === undefined ? dependencies.workspaces.get(context.workspaceId) : target(context, input.root).workspace).grep(
         input.query,
@@ -380,7 +386,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
 
   const diffTool: Tool<DiffInput, object> = {
     manifest: {
-      name: "FileDiff",
+      name: "file_diff",
       version: "1.0.0",
       description: "读取一个已经提出的 Diff Proposal",
       inputSchema: {
@@ -398,6 +404,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
       return { proposalId: requireString(record, "proposalId") };
     },
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }),
+    permissions: noToolPermissions,
     execute: async input => {
       const proposal = dependencies.diffs.get(input.proposalId);
       if (proposal === undefined) {
@@ -410,7 +417,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
 
   const checkpointTool: Tool<CheckpointInput, object> = {
     manifest: {
-      name: "CheckpointRead",
+      name: "checkpoint_read",
       version: "1.0.0",
       description: "读取一个 Checkpoint 的文件快照和状态",
       inputSchema: {
@@ -428,6 +435,7 @@ export function createWorkspaceTools(dependencies: WorkspaceToolDependencies): r
       return { checkpointId: requireString(record, "checkpointId") };
     },
     inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }),
+    permissions: noToolPermissions,
     execute: async input => {
       const checkpoint = await dependencies.checkpoints.get(input.checkpointId);
       if (checkpoint === undefined) {

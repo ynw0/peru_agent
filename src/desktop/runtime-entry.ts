@@ -163,9 +163,9 @@ async function handle(request: RuntimeRequest, signal: AbortSignal): Promise<unk
     case "agent.retry": await host.retry(); return undefined;
     case "permission.resolve": {
       const args = record(request.arguments);
-      const decision = stringValue(args.decision, "decision");
-      if (decision !== "allow" && decision !== "deny") throw new RuntimeProtocolError("INVALID_ARGUMENTS", "permission decision 无效");
-      return { accepted: host.resolvePermission(stringValue(args.requestId, "requestId"), decision) };
+      const reply = stringValue(args.reply, "reply");
+      if (reply !== "once" && reply !== "always" && reply !== "reject") throw new RuntimeProtocolError("INVALID_ARGUMENTS", "permission reply 无效");
+      return { accepted: host.resolvePermission(stringValue(args.requestId, "requestId"), reply) };
     }
     case "plan.resolve": {
       const args = record(request.arguments);

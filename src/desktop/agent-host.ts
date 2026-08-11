@@ -1,3 +1,4 @@
+import type { PermissionReply } from "../permission-rules.js";
 import type { BrowserDomSnapshot, BrowserSessionRecord } from "../browser/types.js";
 import type {
   ComputerScreenshot,
@@ -144,8 +145,8 @@ export class DesktopAgentRuntimeHost {
     this.activeSessions.set(snapshot.workspaceId, retried.sessionId);
   }
 
-  public resolvePermission(requestId: string, decision: "allow" | "deny"): boolean {
-    return this.requireAgent().resolvePermission(requestId, decision);
+  public resolvePermission(requestId: string, reply: PermissionReply): boolean {
+    return this.requireAgent().resolvePermission(requestId, reply);
   }
 
   public resolvePlan(planId: string, decision: "approved" | "rejected"): Promise<void> {

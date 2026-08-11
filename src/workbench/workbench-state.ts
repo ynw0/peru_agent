@@ -27,6 +27,10 @@ export interface PendingPermissionView {
   readonly commands: readonly string[];
   readonly commandText?: string;
   readonly reason: string;
+  readonly permission: string;
+  readonly patterns: readonly string[];
+  readonly always: readonly string[];
+  readonly metadata: Readonly<Record<string, unknown>>;
 }
 
 export interface ToolActivityView {
@@ -323,6 +327,10 @@ export function projectWorkbenchSnapshot(
             commands: [...(event.commands ?? [])],
             ...(event.commandText === undefined ? {} : { commandText: event.commandText }),
             reason: event.reason,
+            permission: event.permission,
+            patterns: [...event.patterns],
+            always: [...event.always],
+            metadata: structuredClone(event.metadata),
           },
         ],
       };

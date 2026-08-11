@@ -154,9 +154,9 @@ export function isRequestParams(method: IpcRequestMethod, value: unknown): boole
     case "session.list":
       return hasOnlyKeys(value, ["workspaceId"]) && isOptionalNonEmptyString(value.workspaceId);
     case "permission.resolve":
-      return hasOnlyKeys(value, ["requestId", "decision"])
+      return hasOnlyKeys(value, ["requestId", "reply"])
         && isNonEmptyString(value.requestId)
-        && (value.decision === "allow" || value.decision === "deny");
+        && (value.reply === "once" || value.reply === "always" || value.reply === "reject");
     case "workspace.register":
       return hasOnlyKeys(value, ["workspaceId", "rootPath"])
         && isNonEmptyString(value.workspaceId)
@@ -563,7 +563,16 @@ function isAgentSessionSnapshot(value: unknown): boolean {
       && isNonEmptyString(value.lastError.message)))
     && isRecord(value.usage)
     && isNonNegativeInteger(value.usage.inputTokens)
-    && isNonNegativeInteger(value.usage.outputTokens);
+    && isNonNegativeInteger(value.usage.outputTokens)
+    && (value.permissionRules === undefined
+      || (Array.isArray(value.permissionRules) && value.permissionRules.every(isSessionPermissionRule)));
+}
+
+function isSessionPermissionRule(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.permission)
+    && isNonEmptyString(value.pattern)
+    && (value.action === "allow" || value.action === "ask" || value.action === "deny");
 }
 
 function isAgentMessage(value: unknown): boolean {
@@ -848,10 +857,15 @@ function isAgentEvent(value: unknown): boolean {
         && (value.networkTargets === undefined || isStringArray(value.networkTargets))
         && (value.commands === undefined || isStringArray(value.commands))
         && (value.commandText === undefined || typeof value.commandText === "string")
-        && isNonEmptyString(value.reason);
+        && isNonEmptyString(value.reason)
+        && isNonEmptyString(value.permission)
+        && isStringArray(value.patterns)
+        && isStringArray(value.always)
+        && isRecord(value.metadata);
     case "permission.resolved":
       return isNonEmptyString(value.requestId)
-        && (value.decision === "allow" || value.decision === "deny");
+        && (value.decision === "allow" || value.decision === "deny")
+        && (value.reply === "once" || value.reply === "always" || value.reply === "reject");
     case "tool.completed":
       return isNonEmptyString(value.toolName)
         && isNonEmptyString(value.toolCallId)

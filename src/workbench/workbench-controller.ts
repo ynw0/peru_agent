@@ -1,3 +1,4 @@
+import type { PermissionReply } from "../permission-rules.js";
 import type { JournalEntry } from "../agent/event-journal.js";
 import type { AgentSessionSnapshot } from "../agent/types.js";
 import type { TypedIpcClient } from "../ipc/channel.js";
@@ -187,10 +188,10 @@ export class WorkbenchController {
     return result;
   }
 
-  public async resolvePermission(requestId: string, decision: "allow" | "deny"): Promise<boolean> {
+  public async resolvePermission(requestId: string, reply: PermissionReply): Promise<boolean> {
     const result = await this.client.request(
       "permission.resolve",
-      { requestId, decision },
+      { requestId, reply },
       { timeoutMs: this.timeoutMs },
     );
     return result.accepted;

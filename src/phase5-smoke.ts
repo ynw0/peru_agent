@@ -93,6 +93,7 @@ const decision = await new PermissionCoordinator(new IncrementingIdGenerator()).
     certifiedComputerApplication: false,
     requestedCapabilities: ["network.internet"],
   },
+  [],
   async () => undefined,
   new AbortController().signal,
 );

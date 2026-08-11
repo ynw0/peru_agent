@@ -7,7 +7,7 @@ import { Document, Paragraph, Packer, Table, TableCell, TableRow } from "docx";
 import JSZip from "jszip";
 import * as mammoth from "mammoth";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import type { Tool } from "../tool-runtime.js";
+import { toolPermission, type Tool } from "../tool-runtime.js";
 import type { DiffManager } from "../diff/diff-manager.js";
 import type { DiffReviewCoordinator } from "../diff/diff-review-coordinator.js";
 import type { WorkspaceRegistry, WorkspaceService } from "../workspace/workspace-service.js";
@@ -109,7 +109,8 @@ function parseExcelEdit(value: unknown): ExcelEditInput {
 }
 
 function excelRead(deps: DocumentToolDependencies): Tool<ExcelReadInput, object> {
-  return { manifest: manifest("ExcelRead", "读取 XLSX 工作表、单元格值和公式", false), validate: parseExcelRead, inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }), execute: async (input, context) => {
+  return { manifest: manifest("ExcelRead", "读取 XLSX 工作表、单元格值和公式", false), validate: parseExcelRead, inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("read", [input.path]), execute: async (input, context) => {
     assertExtension(input.path, ".xlsx"); const source = await readBinary(deps, context.sessionId, context.workspaceId, input.path); const workbook = new Workbook(); await workbook.xlsx.load(Buffer.from(source.bytes) as never);
     const sheets = workbook.worksheets.map(item => item.name); const sheet = workbook.getWorksheet(input.sheet ?? sheets[0]); if (sheet === undefined) throw new Error(`工作表不存在：${input.sheet ?? ""}`);
     const range = input.range ?? (sheet.actualRowCount > 0 && sheet.actualColumnCount > 0 ? `A1:${sheet.getCell(sheet.actualRowCount, sheet.actualColumnCount).address}` : undefined); const values: unknown[][] = [];
@@ -119,11 +120,13 @@ function excelRead(deps: DocumentToolDependencies): Tool<ExcelReadInput, object>
 }
 
 function excelWrite(deps: DocumentToolDependencies): Tool<ExcelWriteInput, unknown> {
-  return { manifest: manifest("ExcelWrite", "创建 XLSX 工作簿并提交 Diff", true), validate: parseExcelWrite, inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }), execute: async (input, context) => { assertExtension(input.path, ".xlsx"); const workbook = new Workbook(); for (const source of input.sheets) { const sheet = workbook.addWorksheet(source.name); for (const row of source.rows) sheet.addRow([...row]); } return proposeBinary(deps, input, context, await workbook.xlsx.writeBuffer() as unknown as Uint8Array); }, serializeOutput: output => JSON.stringify(output) };
+  return { manifest: manifest("ExcelWrite", "创建 XLSX 工作簿并提交 Diff", true), validate: parseExcelWrite, inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("edit", [input.path]), execute: async (input, context) => { assertExtension(input.path, ".xlsx"); const workbook = new Workbook(); for (const source of input.sheets) { const sheet = workbook.addWorksheet(source.name); for (const row of source.rows) sheet.addRow([...row]); } return proposeBinary(deps, input, context, await workbook.xlsx.writeBuffer() as unknown as Uint8Array); }, serializeOutput: output => JSON.stringify(output) };
 }
 
 function excelEdit(deps: DocumentToolDependencies): Tool<ExcelEditInput, unknown> {
-  return { manifest: manifest("ExcelEdit", "修改 XLSX 单元格并提交 Diff", true), validate: parseExcelEdit, inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }), execute: async (input, context) => { assertExtension(input.path, ".xlsx"); const source = await readBinary(deps, context.sessionId, context.workspaceId, input.path); const workbook = new Workbook(); await workbook.xlsx.load(Buffer.from(source.bytes) as never); for (const op of input.operations) { const sheet = workbook.getWorksheet(op.sheet); if (sheet === undefined) throw new Error(`工作表不存在：${op.sheet}`); sheet.getCell(op.cell).value = op.formula === undefined ? op.value as never : { formula: op.formula, result: op.value as never }; } return proposeBinary(deps, input, context, await workbook.xlsx.writeBuffer() as unknown as Uint8Array); }, serializeOutput: output => JSON.stringify(output) };
+  return { manifest: manifest("ExcelEdit", "修改 XLSX 单元格并提交 Diff", true), validate: parseExcelEdit, inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("edit", [input.path]), execute: async (input, context) => { assertExtension(input.path, ".xlsx"); const source = await readBinary(deps, context.sessionId, context.workspaceId, input.path); const workbook = new Workbook(); await workbook.xlsx.load(Buffer.from(source.bytes) as never); for (const op of input.operations) { const sheet = workbook.getWorksheet(op.sheet); if (sheet === undefined) throw new Error(`工作表不存在：${op.sheet}`); sheet.getCell(op.cell).value = op.formula === undefined ? op.value as never : { formula: op.formula, result: op.value as never }; } return proposeBinary(deps, input, context, await workbook.xlsx.writeBuffer() as unknown as Uint8Array); }, serializeOutput: output => JSON.stringify(output) };
 }
 
 function parsePdfRead(value: unknown): PdfReadInput { const r = asRecord(value); const pages = Array.isArray(r.pages) ? r.pages.filter(Number.isInteger).map(Number) : undefined; return { path: requiredString(r.path, "path"), ...(pages === undefined ? {} : { pages }) }; }
@@ -136,6 +139,7 @@ function pdfRead(deps: DocumentToolDependencies): Tool<PdfReadInput, object> {
     manifest: manifest("PdfRead", "读取 PDF 页数、文本和元数据", false),
     validate: parsePdfRead,
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("read", [input.path]),
     execute: async (input, context) => {
       assertExtension(input.path, ".pdf");
       const source = await readBinary(deps, context.sessionId, context.workspaceId, input.path);
@@ -153,13 +157,15 @@ function pdfRead(deps: DocumentToolDependencies): Tool<PdfReadInput, object> {
   };
 }
 function pdfWrite(deps: DocumentToolDependencies): Tool<PdfWriteInput, unknown> {
-  return { manifest: manifest("PdfWrite", "创建 PDF 并提交 Diff", true), validate: parsePdfWrite, inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }), execute: async (input, context) => { assertExtension(input.path, ".pdf"); const document = await PDFDocument.create(); const font = await pdfFont(document); if (input.metadata?.title !== undefined) document.setTitle(input.metadata.title); if (input.metadata?.author !== undefined) document.setAuthor(input.metadata.author); if (input.metadata?.subject !== undefined) document.setSubject(input.metadata.subject); for (const item of input.pages) { const page = document.addPage(); page.drawText(item.text, { x: 48, y: page.getHeight() - 72, size: 12, font, color: rgb(0, 0, 0) }); } return proposeBinary(deps, input, context, await document.save()); }, serializeOutput: output => JSON.stringify(output) };
+  return { manifest: manifest("PdfWrite", "创建 PDF 并提交 Diff", true), validate: parsePdfWrite, inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("edit", [input.path]), execute: async (input, context) => { assertExtension(input.path, ".pdf"); const document = await PDFDocument.create(); const font = await pdfFont(document); if (input.metadata?.title !== undefined) document.setTitle(input.metadata.title); if (input.metadata?.author !== undefined) document.setAuthor(input.metadata.author); if (input.metadata?.subject !== undefined) document.setSubject(input.metadata.subject); for (const item of input.pages) { const page = document.addPage(); page.drawText(item.text, { x: 48, y: page.getHeight() - 72, size: 12, font, color: rgb(0, 0, 0) }); } return proposeBinary(deps, input, context, await document.save()); }, serializeOutput: output => JSON.stringify(output) };
 }
 function pdfEdit(deps: DocumentToolDependencies): Tool<PdfEditInput, unknown> {
   return {
     manifest: manifest("PdfEdit", "执行 PDF 页面级编辑并提交 Diff" , true),
     validate: parsePdfEdit,
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("edit", [input.path]),
     execute: async (input, context) => {
       assertExtension(input.path, ".pdf");
       const source = await readBinary(deps, context.sessionId, context.workspaceId, input.path);
@@ -201,6 +207,7 @@ function wordRead(deps: DocumentToolDependencies): Tool<FileInput, object> {
     manifest: manifest("WordRead", "读取 DOCX 正文、段落和表格文本", false),
     validate: parseFile,
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("read", [input.path]),
     execute: async (input, context) => {
       assertExtension(input.path, ".docx"); const source = await readBinary(deps, context.sessionId, context.workspaceId, input.path); const result = await mammoth.extractRawText({ buffer: source.bytes });
       const zip = await JSZip.loadAsync(source.bytes); const entry = zip.file("word/document.xml"); const xml = entry === null ? "" : await entry.async("string");
@@ -210,7 +217,8 @@ function wordRead(deps: DocumentToolDependencies): Tool<FileInput, object> {
     serializeOutput: output => JSON.stringify(output),
   };
 }
-function wordWrite(deps: DocumentToolDependencies): Tool<WordWriteInput, unknown> { return { manifest: manifest("WordWrite", "创建 DOCX 并提交 Diff", true), validate: parseWordWrite, inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }), execute: async (input, context) => { assertExtension(input.path, ".docx"); const children = input.blocks.map(block => block.type === "table" ? new Table({ rows: (block.rows ?? []).map(row => new TableRow({ children: row.map(text => new TableCell({ children: [new Paragraph(text)] })) })) }) : new Paragraph(block.text ?? "")); return proposeBinary(deps, input, context, await Packer.toBuffer(new Document({ sections: [{ children }] })) as unknown as Uint8Array); }, serializeOutput: output => JSON.stringify(output) }; }
+function wordWrite(deps: DocumentToolDependencies): Tool<WordWriteInput, unknown> { return { manifest: manifest("WordWrite", "创建 DOCX 并提交 Diff", true), validate: parseWordWrite, inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("edit", [input.path]), execute: async (input, context) => { assertExtension(input.path, ".docx"); const children = input.blocks.map(block => block.type === "table" ? new Table({ rows: (block.rows ?? []).map(row => new TableRow({ children: row.map(text => new TableCell({ children: [new Paragraph(text)] })) })) }) : new Paragraph(block.text ?? "")); return proposeBinary(deps, input, context, await Packer.toBuffer(new Document({ sections: [{ children }] })) as unknown as Uint8Array); }, serializeOutput: output => JSON.stringify(output) }; }
 function wordEdit(deps: DocumentToolDependencies): Tool<WordEditInput, unknown> {
   return {
     manifest: manifest("WordEdit", "在 DOCX 同一文本 run 内替换并提交 Diff", true),
@@ -219,6 +227,7 @@ function wordEdit(deps: DocumentToolDependencies): Tool<WordEditInput, unknown> 
       return { path: requiredString(r.path, "path"), replacements: r.replacements.map(item => { const x = asRecord(item); return { oldText: requiredString(x.oldText, "oldText"), newText: typeof x.newText === "string" ? x.newText : "", ...(x.replaceAll === true ? { replaceAll: true } : {}) }; }) };
     },
     inspect: input => ({ affectedFiles: [input.path], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("edit", [input.path]),
     execute: async (input, context) => {
       assertExtension(input.path, ".docx"); const source = await readBinary(deps, context.sessionId, context.workspaceId, input.path); const zip = await JSZip.loadAsync(source.bytes); const entry = zip.file("word/document.xml"); if (entry === null) throw new Error("DOCX 缺少 word/document.xml"); let xml = await entry.async("string");
       for (const replacement of input.replacements) {

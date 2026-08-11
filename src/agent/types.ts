@@ -1,4 +1,5 @@
 import type { Capability, PermissionMode } from "../agent-protocol.js";
+import type { PermissionRule } from "../permission-rules.js";
 
 // ToolCall 是模型提出的结构化工具调用；arguments 必须是已经解析完成的 JSON 对象。
 export interface ToolCall {
@@ -111,6 +112,7 @@ export interface AgentSessionSnapshot {
   readonly compaction?: { readonly compactedAt: string; readonly count: number };
   readonly pendingInputs?: readonly AgentQueuedInput[];
   readonly branchSource?: { readonly sessionId: string; readonly checkpointId: string };
+  readonly permissionRules?: readonly PermissionRule[];
 }
 
 // 每次运行都有硬限制，达到限制后必须明确失败，不能静默继续或自动换模型。

@@ -69,7 +69,7 @@ export function createAgentCoreComposition(dataDirectory: string): AgentCoreComp
     diffs,
     diffReviews,
     tools: new ToolRegistry(),
-    permissions: new PermissionCoordinator(ids, join(dataDirectory, "permissions.json")),
+    permissions: new PermissionCoordinator(ids),
     workspace,
     plans,
     workbench,

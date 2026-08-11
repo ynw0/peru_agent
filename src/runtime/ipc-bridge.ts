@@ -34,7 +34,7 @@ export class AgentRuntimeIpcBridge {
       this.server.registerHandler("session.retry", request =>
         this.runtime.retrySession(request.sessionId)),
       this.server.registerHandler("permission.resolve", request => ({
-        accepted: this.runtime.resolvePermission(request.requestId, request.decision),
+        accepted: this.runtime.resolvePermission(request.requestId, request.reply),
       })),
       this.runtime.onEvent(event => this.server.emit("agent.event", event)),
     );

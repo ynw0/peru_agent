@@ -5,12 +5,13 @@ import { IncrementingIdGenerator } from "../src/agent/id-generator.js";
 import { AgentSession } from "../src/agent/session.js";
 import { InMemoryEventJournal, JsonlEventJournal } from "../src/agent/event-journal.js";
 import { PermissionCoordinator } from "../src/agent/permission-coordinator.js";
+import { evaluatePermission } from "../src/permission-rules.js";
 import type { ModelProvider, ModelRequest, ModelStreamEvent } from "../src/model/types.js";
 import { OpenAICompatibleProvider } from "../src/model/openai-compatible-provider.js";
 import { AgentRuntime } from "../src/runtime/agent-runtime.js";
 import { AgentRuntimeIpcBridge } from "../src/runtime/ipc-bridge.js";
 import { InMemorySessionStore, JsonSessionStore } from "../src/storage/session-store.js";
-import { ToolRegistry, type Tool } from "../src/tool-runtime.js";
+import { ToolRegistry, noToolPermissions, toolPermission, type Tool } from "../src/tool-runtime.js";
 import { TypedIpcClient, TypedIpcServer } from "../src/ipc/channel.js";
 import { createInMemoryTransportPair } from "../src/ipc/transport.js";
 
@@ -80,6 +81,7 @@ const addTool: Tool<AddInput, { readonly sum: number }> = {
     return { a: record.a, b: record.b };
   },
   inspect: () => ({ affectedFiles: [], certifiedComputerApplication: false }),
+  permissions: noToolPermissions,
   execute: async input => ({ sum: input.a + input.b }),
   serializeOutput: output => JSON.stringify(output),
 };
@@ -108,6 +110,7 @@ function createWriteTool(onExecute: () => void): Tool<{ readonly content: string
       return { content: (value as { content: string }).content };
     },
     inspect: () => ({ affectedFiles: ["notes.txt"], certifiedComputerApplication: false }),
+    permissions: input => toolPermission("edit", ["notes.txt"], { contentLength: input.content.length }),
     execute: async (_input, context) => {
       onExecute();
       await context.reportProgress("正在写入测试笔记");
@@ -222,7 +225,7 @@ test("default 权限模式会等待用户明确批准写入工具", async () => 
   runtime.onEvent(event => {
     observedEvents.push(event.type);
     if (event.type === "permission.requested") {
-      assert.equal(runtime.resolvePermission(event.requestId, "allow"), true);
+      assert.equal(runtime.resolvePermission(event.requestId, "once"), true);
     }
   });
 
@@ -420,3 +423,130 @@ test("恢复时会把失去执行进程的 running 会话标记为失败", async
   assert.equal(restored[0]?.status, "failed");
   assert.equal(restored[0]?.lastError?.code, "INTERRUPTED_RUN_RECOVERED");
 });
+
+test("OpenCode permission 规则使用最后匹配且默认 ask", () => {
+  const rules = [
+    { permission: "bash", pattern: "*", action: "ask" as const },
+    { permission: "bash", pattern: "git *", action: "allow" as const },
+    { permission: "bash", pattern: "git push *", action: "deny" as const },
+  ];
+  assert.equal(evaluatePermission("bash", "git status", rules).action, "allow");
+  assert.equal(evaluatePermission("bash", "git", rules).action, "allow");
+  assert.equal(evaluatePermission("bash", "git push origin main", rules).action, "deny");
+  assert.equal(evaluatePermission("read", "src\\agent\\session.ts", [{ permission: "read", pattern: "src/agent/*", action: "allow" }]).action, "allow");
+  assert.equal(evaluatePermission("webfetch", "https://example.com", rules).action, "ask");
+});
+
+test("OpenCode always 会自动放行同会话中匹配的 pending 权限", async () => {
+  const coordinator = new PermissionCoordinator(new IncrementingIdGenerator());
+  const session = new AgentSession("permission-session", "workspace", "default");
+  session.start("run");
+  const events: import("../src/agent-protocol.js").AgentEvent[] = [];
+  const emit = async (event: import("../src/agent-protocol.js").AgentEvent): Promise<void> => { events.push(event); };
+  const manifest = { name: "Bash", version: "1.0.0", riskLevel: "process" as const, capabilities: [] as const, generated: false };
+  const inspection = { affectedFiles: [] as const, certifiedComputerApplication: false };
+  const signal = new AbortController().signal;
+  const first = coordinator.authorize(session, "tool-1", manifest, inspection, [{ permission: "bash", patterns: ["git status"], always: ["git *"], metadata: {} }], emit, signal);
+  const second = coordinator.authorize(session, "tool-2", manifest, inspection, [{ permission: "bash", patterns: ["git diff"], always: ["git *"], metadata: {} }], emit, signal);
+  await waitFor(() => events.filter(event => event.type === "permission.requested").length === 2);
+  const request = events.find(event => event.type === "permission.requested");
+  assert.equal(request?.type, "permission.requested");
+  if (request?.type !== "permission.requested") throw new Error("permission request missing");
+  assert.equal(coordinator.reply(request.requestId, "always"), true);
+  assert.deepEqual(await Promise.all([first, second]), ["allow", "allow"]);
+  const resolved = events.filter(event => event.type === "permission.resolved");
+  assert.equal(resolved.length, 2);
+  assert.equal(resolved.every(event => event.type === "permission.resolved" && event.reply === "always"), true);
+});
+
+test("OpenCode reject 会拒绝同会话全部 pending 权限", async () => {
+  const coordinator = new PermissionCoordinator(new IncrementingIdGenerator());
+  const session = new AgentSession("reject-session", "workspace", "default");
+  session.start("run");
+  const events: import("../src/agent-protocol.js").AgentEvent[] = [];
+  const emit = async (event: import("../src/agent-protocol.js").AgentEvent): Promise<void> => { events.push(event); };
+  const manifest = { name: "Bash", version: "1.0.0", riskLevel: "process" as const, capabilities: [] as const, generated: false };
+  const inspection = { affectedFiles: [] as const, certifiedComputerApplication: false };
+  const signal = new AbortController().signal;
+  const first = coordinator.authorize(session, "tool-r1", manifest, inspection, [{ permission: "bash", patterns: ["npm test"], always: ["npm *"], metadata: {} }], emit, signal);
+  const second = coordinator.authorize(session, "tool-r2", manifest, inspection, [{ permission: "bash", patterns: ["npm run build"], always: ["npm *"], metadata: {} }], emit, signal);
+  await waitFor(() => events.filter(event => event.type === "permission.requested").length === 2);
+  const request = events.find(event => event.type === "permission.requested");
+  if (request?.type !== "permission.requested") throw new Error("permission request missing");
+  assert.equal(coordinator.reply(request.requestId, "reject"), true);
+  assert.deepEqual(await Promise.all([first, second]), ["deny", "deny"]);
+  const resolved = events.filter(event => event.type === "permission.resolved");
+  assert.equal(resolved.length, 2);
+  assert.equal(resolved.every(event => event.type === "permission.resolved" && event.reply === "reject"), true);
+});
+
+
+test("OpenCode always 规则只绑定当前 Session，不能泄漏到其他会话", async () => {
+  const coordinator = new PermissionCoordinator(new IncrementingIdGenerator());
+  const firstSession = new AgentSession("permission-scope-1", "workspace", "default");
+  const secondSession = new AgentSession("permission-scope-2", "workspace", "default");
+  firstSession.start("run-1");
+  secondSession.start("run-2");
+  const events: import("../src/agent-protocol.js").AgentEvent[] = [];
+  const emit = async (event: import("../src/agent-protocol.js").AgentEvent): Promise<void> => { events.push(event); };
+  const manifest = { name: "bash", version: "1.0.0", riskLevel: "process" as const, capabilities: [] as const, generated: false };
+  const inspection = { affectedFiles: [] as const, certifiedComputerApplication: false };
+  const signal = new AbortController().signal;
+
+  const first = coordinator.authorize(firstSession, "tool-scope-1", manifest, inspection, [{ permission: "bash", patterns: ["git status"], always: ["git *"], metadata: {} }], emit, signal);
+  await waitFor(() => events.some(event => event.type === "permission.requested" && event.sessionId === firstSession.id));
+  const firstRequest = events.find(event => event.type === "permission.requested" && event.sessionId === firstSession.id);
+  if (firstRequest?.type !== "permission.requested") throw new Error("first permission request missing");
+  coordinator.reply(firstRequest.requestId, "always");
+  assert.equal(await first, "allow");
+
+  const second = coordinator.authorize(secondSession, "tool-scope-2", manifest, inspection, [{ permission: "bash", patterns: ["git status"], always: ["git *"], metadata: {} }], emit, signal);
+  await waitFor(() => events.some(event => event.type === "permission.requested" && event.sessionId === secondSession.id));
+  const secondRequest = events.find(event => event.type === "permission.requested" && event.sessionId === secondSession.id);
+  if (secondRequest?.type !== "permission.requested") throw new Error("second permission request missing");
+  coordinator.reply(secondRequest.requestId, "once");
+  assert.equal(await second, "allow");
+});
+
+test("OpenCode always 规则随 Session snapshot 持久化并在恢复后继续生效", async () => {
+  const ids = new IncrementingIdGenerator();
+  const coordinator = new PermissionCoordinator(ids);
+  const session = new AgentSession("permission-persist", "workspace", "default");
+  session.start("run-1");
+  const events: import("../src/agent-protocol.js").AgentEvent[] = [];
+  const emit = async (event: import("../src/agent-protocol.js").AgentEvent): Promise<void> => { events.push(event); };
+  const manifest = { name: "bash", version: "1.0.0", riskLevel: "process" as const, capabilities: [] as const, generated: false };
+  const inspection = { affectedFiles: [] as const, certifiedComputerApplication: false };
+  const signal = new AbortController().signal;
+
+  const first = coordinator.authorize(session, "tool-persist-1", manifest, inspection, [{ permission: "bash", patterns: ["git status"], always: ["git *"], metadata: {} }], emit, signal);
+  await waitFor(() => events.some(event => event.type === "permission.requested"));
+  const request = events.find(event => event.type === "permission.requested");
+  if (request?.type !== "permission.requested") throw new Error("permission request missing");
+  coordinator.reply(request.requestId, "always");
+  assert.equal(await first, "allow");
+
+  session.complete();
+  const restored = AgentSession.restore(session.snapshot());
+  restored.start("run-2");
+  const restoredEvents: import("../src/agent-protocol.js").AgentEvent[] = [];
+  const result = await new PermissionCoordinator(new IncrementingIdGenerator()).authorize(
+    restored,
+    "tool-persist-2",
+    manifest,
+    inspection,
+    [{ permission: "bash", patterns: ["git diff"], always: ["git *"], metadata: {} }],
+    async event => { restoredEvents.push(event); },
+    new AbortController().signal,
+  );
+  assert.equal(result, "allow");
+  assert.equal(restoredEvents.some(event => event.type === "permission.requested"), false);
+});
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) return;
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  throw new Error("等待测试条件超时");
+}

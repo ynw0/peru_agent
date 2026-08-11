@@ -1,5 +1,5 @@
 import type { Capability, NetworkMode } from "../agent-protocol.js";
-import type { Tool } from "../tool-runtime.js";
+import { toolPermission, type Tool } from "../tool-runtime.js";
 import type { PreparedWebFetch, PreparedWebSearch, WebFetchService, WebSearchService } from "./web-services.js";
 
 interface FetchInput { readonly url: string; readonly maxChars: number }
@@ -17,7 +17,7 @@ export function createWebTools(dependencies: WebToolDependencies): readonly Tool
 
   const fetchTool: Tool<FetchInput, object> = {
     manifest: {
-      name: "WebFetch",
+      name: "webfetch",
       version: "1.0.0",
       description: "通过统一 Egress Broker 抓取经过审核的网页文本",
       inputSchema: {
@@ -47,6 +47,7 @@ export function createWebTools(dependencies: WebToolDependencies): readonly Tool
         reason: `抓取 ${prepared.lease.hostname} 的网页文本`,
       };
     },
+    permissions: (input, inspection) => toolPermission("webfetch", [input.url], { url: input.url, networkTargets: inspection.networkTargets ?? [] }),
     async execute(_input, context) {
       const prepared = preparedFetch.get(context.toolCallId);
       if (prepared === undefined) throw new Error("WebFetch 缺少已审核出口授权");
@@ -65,7 +66,7 @@ export function createWebTools(dependencies: WebToolDependencies): readonly Tool
 
   const searchTool: Tool<SearchInput, object> = {
     manifest: {
-      name: "WebSearch",
+      name: "websearch",
       version: "1.0.0",
       description: "通过配置的搜索 Provider 和统一 Egress Broker 搜索互联网",
       inputSchema: {
@@ -96,6 +97,7 @@ export function createWebTools(dependencies: WebToolDependencies): readonly Tool
         reason: `使用受控 Provider 搜索：${input.query}`,
       };
     },
+    permissions: (input, inspection) => toolPermission("websearch", [input.query], { query: input.query, networkTargets: inspection.networkTargets ?? [] }),
     async execute(_input, context) {
       const prepared = preparedSearch.get(context.toolCallId);
       if (prepared === undefined) throw new Error("WebSearch 缺少已审核出口授权");

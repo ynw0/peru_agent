@@ -1,3 +1,4 @@
+import type { PermissionReply } from "../permission-rules.js";
 import type { AgentSessionSnapshot, AgentQueuedInput, AgentQueuePriority, AgentUserInput, SessionCompactionResult } from "../agent/types.js";
 import type { CheckpointRecord } from "../checkpoint/checkpoint-manager.js";
 import type { DiffProposal } from "../diff/diff-manager.js";
@@ -209,10 +210,9 @@ export class TuiController {
     });
   }
 
-  public resolvePermission(requestId: string, decision: "allow" | "deny"): boolean {
-    return this.runtime.resolvePermission(requestId, decision);
+  public resolvePermission(requestId: string, reply: PermissionReply): boolean {
+    return this.runtime.resolvePermission(requestId, reply);
   }
-  public grantPermission(requestId: string, scope: "session" | "project"): boolean { return this.runtime.grantPermission?.(requestId, scope) ?? false; }
 
   public resolveDiff(proposalId: string, decision: "accepted" | "rejected"): Promise<DiffProposal> {
     return this.runtime.resolveDiff(proposalId, decision);

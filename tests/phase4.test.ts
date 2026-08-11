@@ -103,9 +103,9 @@ test("Read、Glob 和 Grep 复用统一 WorkspaceService", async () => {
   await mkdir(`${fixture.workspace.root}/src`, { recursive: true });
   await writeFile(`${fixture.workspace.root}/src/app.ts`, "const alpha = 1;", "utf8");
 
-  const read = await executeTool(fixture, "Read", { path: "root.txt" }) as { content: string };
-  const glob = await executeTool(fixture, "Glob", { pattern: "**/*" }) as { paths: string[] };
-  const grep = await executeTool(fixture, "Grep", { query: "alpha", pattern: "**/*" }) as {
+  const read = await executeTool(fixture, "read", { path: "root.txt" }) as { content: string };
+  const glob = await executeTool(fixture, "glob", { pattern: "**/*" }) as { paths: string[] };
+  const grep = await executeTool(fixture, "grep", { query: "alpha", pattern: "**/*" }) as {
     matches: { path: string; line: number }[];
   };
 
@@ -119,7 +119,7 @@ test("Write 只提出 Diff，接受后才写入，Checkpoint 可以恢复", asyn
   const fixture = await createFixture("accept-restore");
   await writeFile(`${fixture.workspace.root}/note.txt`, "before", "utf8");
 
-  const proposal = await executeTool(fixture, "Write", {
+  const proposal = await executeTool(fixture, "write", {
     path: "note.txt",
     content: "after",
   }) as { id: string };
@@ -137,7 +137,7 @@ test("Write 只提出 Diff，接受后才写入，Checkpoint 可以恢复", asyn
 
 test("新文件接受后可由 Checkpoint 恢复为不存在", async () => {
   const fixture = await createFixture("new-file");
-  const proposal = await executeTool(fixture, "Write", {
+  const proposal = await executeTool(fixture, "write", {
     path: "new.txt",
     content: "created",
   }) as { id: string };
@@ -151,7 +151,7 @@ test("新文件接受后可由 Checkpoint 恢复为不存在", async () => {
 test("Diff 接受前发现外部修改会标记 conflict 并拒绝覆盖", async () => {
   const fixture = await createFixture("conflict");
   await writeFile(`${fixture.workspace.root}/conflict.txt`, "base", "utf8");
-  const proposal = await executeTool(fixture, "Write", {
+  const proposal = await executeTool(fixture, "write", {
     path: "conflict.txt",
     content: "agent-change",
   }) as { id: string };
@@ -169,7 +169,7 @@ test("Diff 接受前发现外部修改会标记 conflict 并拒绝覆盖", async
 test("拒绝 Diff 不会修改文件", async () => {
   const fixture = await createFixture("reject");
   await writeFile(`${fixture.workspace.root}/reject.txt`, "before", "utf8");
-  const proposal = await executeTool(fixture, "Write", {
+  const proposal = await executeTool(fixture, "write", {
     path: "reject.txt",
     content: "after",
   }) as { id: string };
@@ -181,12 +181,12 @@ test("拒绝 Diff 不会修改文件", async () => {
 test("Edit 对重复 oldText 要求明确 replaceAll", async () => {
   const fixture = await createFixture("edit");
   await writeFile(`${fixture.workspace.root}/repeat.txt`, "x x", "utf8");
-  await assert.rejects(executeTool(fixture, "Edit", {
+  await assert.rejects(executeTool(fixture, "edit", {
     path: "repeat.txt",
     oldText: "x",
     newText: "y",
   }));
-  const proposal = await executeTool(fixture, "Edit", {
+  const proposal = await executeTool(fixture, "edit", {
     path: "repeat.txt",
     oldText: "x",
     newText: "y",
@@ -211,7 +211,7 @@ test("AgentLoop 调用 Write 时只生成 Proposal，不触发普通写权限并
         type: "tool-call.delta",
         index: 0,
         id: "write-call",
-        name: "Write",
+        name: "write",
         argumentsDelta: JSON.stringify({ path: "agent.txt", content: "after" }),
       },
       { type: "response.completed", finishReason: "tool_calls", usage: { inputTokens: 5, outputTokens: 3 } },
@@ -388,7 +388,7 @@ test("多文件 Diff 任一文件冲突时不会写入其他文件", async () =>
 test("Checkpoint 恢复前文件再次变化时拒绝覆盖用户新修改", async () => {
   const fixture = await createFixture("restore-conflict");
   await writeFile(`${fixture.workspace.root}/restore.txt`, "before", "utf8");
-  const proposal = await executeTool(fixture, "Write", {
+  const proposal = await executeTool(fixture, "write", {
     path: "restore.txt",
     content: "after",
   }) as { id: string };

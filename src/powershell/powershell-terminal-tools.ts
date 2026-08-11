@@ -1,7 +1,7 @@
 import type { NetworkMode } from "../agent-protocol.js";
 import type { WindowsSandboxBrokerClient } from "../sandbox/broker-client.js";
 import type { PowerShellAnalysisResult } from "../sandbox/broker-protocol.js";
-import type { Tool, ToolExecutionContext, ToolInspection, ToolInspectionContext } from "../tool-runtime.js";
+import { toolPermission, type Tool, type ToolExecutionContext, type ToolInspection, type ToolInspectionContext } from "../tool-runtime.js";
 import { normalizeWorkspacePath } from "../workspace/path-guard.js";
 import type { WorkspaceRegistry } from "../workspace/workspace-service.js";
 
@@ -29,7 +29,7 @@ export function createPowerShellTerminalTools(dependencies: PowerShellTerminalTo
   const maximumTimeoutMs = dependencies.maximumTimeoutMs ?? 120_000;
   const analyses = new Map<string, CachedStart>();
   const start: Tool<StartInput, object> = {
-    manifest: { name: "PowerShellBackgroundStart", version: "1.0.0", description: "在 Windows 强沙箱中启动可读取输出和写入输入的 PowerShell 后台终端", inputSchema: { type: "object", properties: { script: { type: "string" }, timeoutMs: { type: "integer", minimum: 100, maximum: maximumTimeoutMs } }, required: ["script"], additionalProperties: false }, riskLevel: "process", capabilities: ["process.execute", "process.background"], generated: false },
+    manifest: { name: "bash_background_start", version: "1.0.0", description: "在 Windows 强沙箱中启动可读取输出和写入输入的 PowerShell 后台终端", inputSchema: { type: "object", properties: { script: { type: "string" }, timeoutMs: { type: "integer", minimum: 100, maximum: maximumTimeoutMs } }, required: ["script"], additionalProperties: false }, riskLevel: "process", capabilities: ["process.execute", "process.background"], generated: false },
     validate: value => startInput(value, maximumTimeoutMs),
     async inspect(input, context): Promise<ToolInspection> {
       if (context === undefined) throw new Error("后台终端检查缺少会话上下文");
@@ -41,6 +41,7 @@ export function createPowerShellTerminalTools(dependencies: PowerShellTerminalTo
       analyses.set(key, { input, analysis, cwd: workspace.root, networkMode });
       return { affectedFiles: analysis.affectedFiles.map(normalizeWorkspacePath), certifiedComputerApplication: false, requestedCapabilities: [...analysis.requestedCapabilities, "process.background"], networkTargets: [...analysis.networkTargets], commands: analysis.commands.map(command => command.name), sandboxRequired: true };
     },
+    permissions: (input, inspection) => toolPermission("bash", [input.script], { commands: inspection.commands ?? [], networkTargets: inspection.networkTargets ?? [] }, [input.script]),
     async execute(input, context) {
       const cached = analyses.get(inspectKey(context)); if (cached === undefined || cached.input.script !== input.script || cached.input.timeoutMs !== input.timeoutMs) throw new Error("后台终端执行缺少已审核且未变化的分析结果");
       const terminalId = `terminal:${context.sessionId}:${context.toolCallId}`;
@@ -51,16 +52,16 @@ export function createPowerShellTerminalTools(dependencies: PowerShellTerminalTo
     serializeOutput: output => JSON.stringify(output),
   };
   const read: Tool<TerminalReadInput, object> = {
-    manifest: { name: "PowerShellBackgroundRead", version: "1.0.0", description: "读取 PowerShell 后台终端自 cursor 以来的增量输出", inputSchema: { type: "object", properties: { terminalId: { type: "string" }, cursor: { type: "integer", minimum: 0 } }, required: ["terminalId", "cursor"], additionalProperties: false }, riskLevel: "process", capabilities: ["process.background"], generated: false },
-    validate(value) { const input = record(value); const cursor = input.cursor; if (!Number.isInteger(cursor) || Number(cursor) < 0) throw new Error("cursor 必须是非负整数"); return { ...terminalId(input), cursor: Number(cursor) }; }, inspect: input => ({ affectedFiles: [], certifiedComputerApplication: false, requestedCapabilities: ["process.background"], commands: [`terminal.read:${input.terminalId}`] }), execute: (input, context) => dependencies.broker.readPowerShellTerminal(input, context.signal), serializeOutput: output => JSON.stringify(output),
+    manifest: { name: "bash_background_read", version: "1.0.0", description: "读取 PowerShell 后台终端自 cursor 以来的增量输出", inputSchema: { type: "object", properties: { terminalId: { type: "string" }, cursor: { type: "integer", minimum: 0 } }, required: ["terminalId", "cursor"], additionalProperties: false }, riskLevel: "process", capabilities: ["process.background"], generated: false },
+    validate(value) { const input = record(value); const cursor = input.cursor; if (!Number.isInteger(cursor) || Number(cursor) < 0) throw new Error("cursor 必须是非负整数"); return { ...terminalId(input), cursor: Number(cursor) }; }, inspect: input => ({ affectedFiles: [], certifiedComputerApplication: false, requestedCapabilities: ["process.background"], commands: [`terminal.read:${input.terminalId}`] }), permissions: input => toolPermission("bash", [`terminal.read:${input.terminalId}`], { terminalId: input.terminalId }, [`terminal.read:${input.terminalId}`]), execute: (input, context) => dependencies.broker.readPowerShellTerminal(input, context.signal), serializeOutput: output => JSON.stringify(output),
   };
   const write: Tool<TerminalWriteInput, object> = {
-    manifest: { name: "PowerShellBackgroundWrite", version: "1.0.0", description: "向已审核的 PowerShell 后台终端写入 UTF-8 标准输入", inputSchema: { type: "object", properties: { terminalId: { type: "string" }, input: { type: "string" } }, required: ["terminalId", "input"], additionalProperties: false }, riskLevel: "process", capabilities: ["process.background"], generated: false },
-    validate(value) { const input = record(value); return { ...terminalId(input), input: typeof input.input === "string" ? input.input : (() => { throw new Error("input 必须是字符串"); })() }; }, inspect: input => ({ affectedFiles: [], certifiedComputerApplication: false, requestedCapabilities: ["process.background"], commands: [`terminal.write:${input.terminalId}`] }), execute: (input, context) => dependencies.broker.writePowerShellTerminal(input, context.signal), serializeOutput: output => JSON.stringify(output),
+    manifest: { name: "bash_background_write", version: "1.0.0", description: "向已审核的 PowerShell 后台终端写入 UTF-8 标准输入", inputSchema: { type: "object", properties: { terminalId: { type: "string" }, input: { type: "string" } }, required: ["terminalId", "input"], additionalProperties: false }, riskLevel: "process", capabilities: ["process.background"], generated: false },
+    validate(value) { const input = record(value); return { ...terminalId(input), input: typeof input.input === "string" ? input.input : (() => { throw new Error("input 必须是字符串"); })() }; }, inspect: input => ({ affectedFiles: [], certifiedComputerApplication: false, requestedCapabilities: ["process.background"], commands: [`terminal.write:${input.terminalId}`] }), permissions: input => toolPermission("bash", [`terminal.write:${input.terminalId}`], { terminalId: input.terminalId }, [`terminal.write:${input.terminalId}`]), execute: (input, context) => dependencies.broker.writePowerShellTerminal(input, context.signal), serializeOutput: output => JSON.stringify(output),
   };
   const cancel: Tool<TerminalIdInput, object> = {
-    manifest: { name: "PowerShellBackgroundCancel", version: "1.0.0", description: "终止 PowerShell 后台终端及其 Job Object 内的整个进程树", inputSchema: { type: "object", properties: { terminalId: { type: "string" } }, required: ["terminalId"], additionalProperties: false }, riskLevel: "process", capabilities: ["process.background"], generated: false },
-    validate: terminalId, inspect: input => ({ affectedFiles: [], certifiedComputerApplication: false, requestedCapabilities: ["process.background"], commands: [`terminal.cancel:${input.terminalId}`], sandboxRequired: true }), execute: (input, context) => dependencies.broker.cancelPowerShellTerminal(input, context.signal), serializeOutput: output => JSON.stringify(output),
+    manifest: { name: "bash_background_cancel", version: "1.0.0", description: "终止 PowerShell 后台终端及其 Job Object 内的整个进程树", inputSchema: { type: "object", properties: { terminalId: { type: "string" } }, required: ["terminalId"], additionalProperties: false }, riskLevel: "process", capabilities: ["process.background"], generated: false },
+    validate: terminalId, inspect: input => ({ affectedFiles: [], certifiedComputerApplication: false, requestedCapabilities: ["process.background"], commands: [`terminal.cancel:${input.terminalId}`], sandboxRequired: true }), permissions: input => toolPermission("bash", [`terminal.cancel:${input.terminalId}`], { terminalId: input.terminalId }, [`terminal.cancel:${input.terminalId}`]), execute: (input, context) => dependencies.broker.cancelPowerShellTerminal(input, context.signal), serializeOutput: output => JSON.stringify(output),
   };
   return [start, read, write, cancel];
 }

@@ -394,11 +394,13 @@ export class AgentLoop {
         commands: [...(inspection.commands ?? [])],
         ...(inspection.commandText === undefined ? {} : { commandText: inspection.commandText }),
       });
+      const permissionRequests = tool.permissions(input, inspection);
       const permission = await this.dependencies.permissions.authorize(
         session,
         toolCall.id,
         tool.manifest,
         inspection,
+        permissionRequests,
         emit,
         signal,
       );

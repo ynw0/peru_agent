@@ -7,6 +7,7 @@ import type {
   AgentSessionStatus,
 } from "./types.js";
 import type { PermissionMode } from "../agent-protocol.js";
+import type { PermissionRule } from "../permission-rules.js";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -30,6 +31,7 @@ export class AgentSession {
   private title: string | undefined;
   private compaction: { compactedAt: string; count: number } | undefined;
   private branchSource: { sessionId: string; checkpointId: string } | undefined;
+  private permissionRules: PermissionRule[] = [];
 
   public readonly createdAt: string;
 
@@ -66,6 +68,7 @@ export class AgentSession {
     session.title = snapshot.title;
     session.compaction = snapshot.compaction === undefined ? undefined : { ...snapshot.compaction };
     session.branchSource = snapshot.branchSource === undefined ? undefined : { ...snapshot.branchSource };
+    session.permissionRules = [...(snapshot.permissionRules ?? [])].map(rule => ({ ...rule }));
     return session;
   }
 
@@ -116,6 +119,12 @@ export class AgentSession {
   public incrementToolCallCount(count = 1): void { this.toolCallCount += count; this.touch(); }
   public rename(title: string): void { this.title = title.trim() === "" ? undefined : title.trim(); this.touch(); }
   public setBranchSource(source: { readonly sessionId: string; readonly checkpointId: string }): void { this.branchSource = { ...source }; this.touch(); }
+  public addPermissionRules(rules: readonly PermissionRule[]): void {
+    if (rules.length === 0) return;
+    this.permissionRules.push(...rules.map(rule => ({ ...rule })));
+    this.touch();
+  }
+  public getPermissionRules(): readonly PermissionRule[] { return this.permissionRules.map(rule => ({ ...rule })); }
   public enqueueInput(id: string, input: AgentUserInput, priority: AgentQueuePriority): void {
     this.pendingInputs.push({ id, priority, input, createdAt: nowIso() });
     this.touch();
@@ -203,6 +212,7 @@ export class AgentSession {
       ...(this.compaction === undefined ? {} : { compaction: { ...this.compaction } }),
       pendingInputs: this.getPendingInputs(),
       ...(this.branchSource === undefined ? {} : { branchSource: { ...this.branchSource } }),
+      ...(this.permissionRules.length === 0 ? {} : { permissionRules: this.getPermissionRules() }),
     };
   }
 

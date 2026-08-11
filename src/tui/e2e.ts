@@ -102,7 +102,7 @@ export async function runTuiRealE2e(): Promise<TuiE2eReport> {
     const reviewSubscription = activeRuntime.onSnapshot(snapshot => {
       for (const permission of snapshot.pendingPermissions) {
         if (acceptedPermissions.has(permission.requestId)) continue;
-        const valid = permission.toolName === "PowerShell"
+        const valid = permission.toolName === "bash"
           && permission.commandText === EXPECTED_COMMAND
           && permission.commands.length === 1
           && permission.commands[0] === "Get-Content"
@@ -113,7 +113,7 @@ export async function runTuiRealE2e(): Promise<TuiE2eReport> {
         if (!valid) {
           failReview(new Error(`拒绝未匹配的 PowerShell 审核：${permission.commandText ?? ""}`));
         } else {
-          if (activeController?.resolvePermission(permission.requestId, "allow") !== true) {
+          if (activeController?.resolvePermission(permission.requestId, "once") !== true) {
             failReview(new Error("PowerShell 权限请求未能进入 Broker 执行流程"));
           }
         }
@@ -136,9 +136,9 @@ export async function runTuiRealE2e(): Promise<TuiE2eReport> {
       }
     });
 
-    await step(steps, "严格执行 Read → Edit → PowerShell", async () => {
+    await step(steps, "严格执行 read → edit → bash", async () => {
       const started = await activeController!.sendInput(
-        "这是自动验收任务，必须立即调用 Tool，不要提问或等待澄清。`after` 是固定字面量文本 after，不是待用户提供的占位符。在当前工作区严格按顺序完成：1 使用 Read 读取 note.txt；2 使用 Edit 将完整内容 before 替换成固定字面量 after，不要调用 Write/ApplyPatch；3 使用 PowerShell 执行脚本 Get-Content -LiteralPath 'note.txt' -Raw；最后用一句话明确包含 after。不要读取或修改其他文件，不要执行其他命令，不要访问网络。",
+        "这是自动验收任务，必须立即调用 Tool，不要提问或等待澄清。`after` 是固定字面量文本 after，不是待用户提供的占位符。在当前工作区严格按顺序完成：1 使用 read 读取 note.txt；2 使用 edit 将完整内容 before 替换成固定字面量 after，不要调用 write/apply_patch；3 使用 bash 执行脚本 Get-Content -LiteralPath 'note.txt' -Raw；最后用一句话明确包含 after。不要读取或修改其他文件，不要执行其他命令，不要访问网络。",
       );
       let session: AgentSessionSnapshot;
       try {
@@ -168,7 +168,7 @@ export async function runTuiRealE2e(): Promise<TuiE2eReport> {
       const session = await activeController!.getRuntime().getActiveSession();
       const toolMessages = session.messages.filter(message => message.role === "tool");
       const toolNames = toolMessages.map(message => message.toolName);
-      if (toolNames.length !== 3 || toolNames[0] !== "Read" || toolNames[1] !== "Edit" || toolNames[2] !== "PowerShell") {
+      if (toolNames.length !== 3 || toolNames[0] !== "read" || toolNames[1] !== "edit" || toolNames[2] !== "bash") {
         throw new Error(`Tool 顺序不符合严格验收：${toolNames.join(" → ")}`);
       }
       const calls = session.messages
@@ -177,13 +177,13 @@ export async function runTuiRealE2e(): Promise<TuiE2eReport> {
       const readArgs = calls[0]?.arguments;
       const editArgs = calls[1]?.arguments;
       const shellArgs = calls[2]?.arguments;
-      if (calls.length !== 3 || calls[0]?.name !== "Read" || calls[1]?.name !== "Edit" || calls[2]?.name !== "PowerShell"
+      if (calls.length !== 3 || calls[0]?.name !== "read" || calls[1]?.name !== "edit" || calls[2]?.name !== "bash"
         || !isRecord(readArgs) || readArgs.path !== "note.txt"
         || !isRecord(editArgs) || editArgs.path !== "note.txt" || editArgs.oldText !== "before" || editArgs.newText !== "after"
         || !isRecord(shellArgs) || shellArgs.script !== EXPECTED_COMMAND) {
         throw new Error("Tool 参数不符合严格验收");
       }
-      const powerShellCall = session.messages.find(message => message.role === "tool" && message.toolName === "PowerShell");
+      const powerShellCall = session.messages.find(message => message.role === "tool" && message.toolName === "bash");
       if (powerShellCall === undefined || powerShellCall.role !== "tool") throw new Error("未发现 PowerShell Tool Result");
       const detail = await activeController!.getToolResult(powerShellCall.toolCallId);
       const result = detail?.powerShell;

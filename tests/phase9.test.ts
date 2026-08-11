@@ -312,7 +312,7 @@ test("Web Tool 权限拒绝路径会释放单次出口授权", async () => {
     search: new WebSearchService(env, new JsonSearchProvider()),
     getNetworkMode: () => "internet",
   });
-  const tool = tools.find(item => item.manifest.name === "WebFetch");
+  const tool = tools.find(item => item.manifest.name === "webfetch");
   if (tool === undefined) throw new Error("WebFetch Tool 未注册");
   const input = tool.validate({ url: "https://page.example/" });
   const context: ToolInspectionContext = {

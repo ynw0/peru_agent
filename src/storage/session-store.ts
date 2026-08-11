@@ -168,10 +168,22 @@ function validateSnapshot(value: unknown): AgentSessionSnapshot {
   if (typeof record.id !== "string"
     || typeof record.workspaceId !== "string"
     || typeof record.status !== "string"
-    || !Array.isArray(record.messages)) {
+    || !Array.isArray(record.messages)
+    || (record.permissionRules !== undefined
+      && (!Array.isArray(record.permissionRules) || !record.permissionRules.every(isPermissionRule)))) {
     throw new Error("会话文件结构无效");
   }
   return value as AgentSessionSnapshot;
+}
+
+function isPermissionRule(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.permission === "string"
+    && record.permission.trim() !== ""
+    && typeof record.pattern === "string"
+    && record.pattern.trim() !== ""
+    && (record.action === "allow" || record.action === "ask" || record.action === "deny");
 }
 
 function validateTrashRecord(value: unknown): TrashedSessionRecord {

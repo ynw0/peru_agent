@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import type { PermissionReply } from "../permission-rules.js";
 import type { AgentSessionSnapshot } from "../agent/types.js";
 import type { TrashedSessionRecord } from "../storage/session-store.js";
 import { AgentRuntime } from "../runtime/agent-runtime.js";
@@ -92,8 +93,7 @@ export interface TuiRuntime {
   deleteTrash(sessionId: string): Promise<boolean>;
   listDiffs(): readonly DiffProposal[];
   getDiff(proposalId: string): DiffProposal | undefined;
-  resolvePermission(requestId: string, decision: "allow" | "deny"): boolean;
-  grantPermission?(requestId: string, scope: "session" | "project"): boolean;
+  resolvePermission(requestId: string, reply: PermissionReply): boolean;
   resolveDiff(proposalId: string, decision: "accepted" | "rejected"): Promise<DiffProposal>;
   listCheckpoints(): Promise<readonly CheckpointRecord[]>;
   restoreCheckpoint(checkpointId: string, scope?: CheckpointRestoreScope): Promise<CheckpointRecord>;
@@ -332,7 +332,6 @@ class TuiRuntimeImpl implements TuiRuntime {
 
   public async createSession(permissionMode = this.configuration.permissionMode): Promise<AgentSessionSnapshot> {
     this.externalAccess.revokeSession(this.activeSessionId);
-    this.agent.clearSessionPermissionGrants(this.activeSessionId);
     const created = await this.agent.createSession(this.workspaceId, permissionMode);
     this.activeSessionId = created.id;
     this.core.workbench.activate(created.id);
@@ -346,7 +345,6 @@ class TuiRuntimeImpl implements TuiRuntime {
       throw new Error("不能恢复其他工作区的会话；请先使用 /workspace 切换目录");
     }
     this.externalAccess.revokeSession(this.activeSessionId);
-    this.agent.clearSessionPermissionGrants(this.activeSessionId);
     this.activeSessionId = sessionId;
     this.core.workbench.activate(sessionId);
     await this.emitSnapshot(this.getSnapshot());
@@ -361,7 +359,6 @@ class TuiRuntimeImpl implements TuiRuntime {
       const active = await this.getActiveSession();
       if (active.status === "running" || active.status === "awaitingPermission") throw new Error("运行期间不能删除会话");
       this.externalAccess.revokeSession(sessionId);
-      this.agent.clearSessionPermissionGrants(sessionId);
     }
     return this.agent.trashSession(sessionId);
   }
@@ -383,12 +380,8 @@ class TuiRuntimeImpl implements TuiRuntime {
     return proposal !== undefined && (proposal.workspaceId === this.workspaceId || proposal.sessionId === this.activeSessionId) ? proposal : undefined;
   }
 
-  public resolvePermission(requestId: string, decision: "allow" | "deny"): boolean {
-    return this.agent.resolvePermission(requestId, decision);
-  }
-
-  public grantPermission(requestId: string, scope: "session" | "project"): boolean {
-    return this.agent.resolvePermissionScope(requestId, scope);
+  public resolvePermission(requestId: string, reply: PermissionReply): boolean {
+    return this.agent.resolvePermission(requestId, reply);
   }
 
   public resolveDiff(proposalId: string, decision: "accepted" | "rejected"): Promise<DiffProposal> {
@@ -458,7 +451,7 @@ class TuiRuntimeImpl implements TuiRuntime {
       content: message.content,
       isError: message.isError,
     };
-    if (message.toolName !== "PowerShell") return detail;
+    if (message.toolName !== "bash") return detail;
     try {
       const value = JSON.parse(message.content) as unknown;
       if (!isRecord(value)
@@ -590,7 +583,6 @@ class TuiRuntimeImpl implements TuiRuntime {
   public async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
-    this.agent.clearSessionPermissionGrants(this.activeSessionId);
     this.externalAccess.revokeSession(this.activeSessionId);
     let failure: unknown;
     await this.core.orchestration.dispose(this.activeSessionId).catch(error => { failure ??= error; });

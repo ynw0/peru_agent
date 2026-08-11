@@ -9,7 +9,7 @@ import { InMemoryDiffProposalStore } from "../src/diff/diff-store.js";
 import { AgentRuntime } from "../src/runtime/agent-runtime.js";
 import { PermissionCoordinator } from "../src/agent/permission-coordinator.js";
 import { InMemorySessionStore } from "../src/storage/session-store.js";
-import { ToolRegistry, type Tool } from "../src/tool-runtime.js";
+import { ToolRegistry, toolPermission, type Tool } from "../src/tool-runtime.js";
 import type { ModelProvider, ModelRequest, ModelStreamEvent } from "../src/model/types.js";
 import { WorkspaceRegistry, WorkspaceService } from "../src/workspace/workspace-service.js";
 import { SnapshotWorktreeManager } from "../src/subagent/worktree-manager.js";
@@ -403,6 +403,7 @@ test("AgentLoop 的子任务运行策略同时过滤模型工具列表和执行�
     },
     validate: () => ({}),
     inspect: () => ({ affectedFiles: ["src/app.ts"], certifiedComputerApplication: false }),
+    permissions: () => toolPermission("edit", ["src/app.ts"]),
     execute: async () => {
       executed = true;
       return { ok: true };

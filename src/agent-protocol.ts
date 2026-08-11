@@ -140,12 +140,17 @@ export type AgentEvent =
     commands?: string[];
     commandText?: string;
     reason: string;
+    permission: string;
+    patterns: string[];
+    always: string[];
+    metadata: Record<string, unknown>;
   }
   | {
     type: "permission.resolved";
     sessionId: string;
     requestId: string;
     decision: "allow" | "deny";
+    reply: "once" | "always" | "reject";
   }
   | {
     type: "tool.completed";

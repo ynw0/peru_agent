@@ -174,7 +174,7 @@ export class RuntimeCompositionRoot {
       ? { fetch: this.fetch, getNetworkMode: () => this.configuration.network.mode }
       : { fetch: this.fetch, search: this.search, getNetworkMode: () => this.configuration.network.mode };
     for (const tool of createWebTools(dependencies)) {
-      if (tool.manifest.name === "WebFetch" && !this.configuration.network.webFetchEnabled) continue;
+      if (tool.manifest.name === "webfetch" && !this.configuration.network.webFetchEnabled) continue;
       this.tools.register(tool);
     }
   }

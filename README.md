@@ -2,6 +2,11 @@
 
 完全自研 Agent Runtime、基于 Code OSS 的独立 AI IDE。Claude Code 源码仅作为只读架构参考，不参与产品构建。
 
+
+## OpenCode Tool / Permission compatibility
+
+核心编码 Tool 与审核协议已对齐 OpenCode 的 permission/pattern/once/always/reject 语义，同时继续使用 Peru Agent 的 Diff Proposal、Windows Sandbox Broker、Egress Broker 和子 Agent 门禁后端。完整映射与刻意差异见 `docs/opencode-tool-permission-compatibility.md`；OpenCode MIT 许可证副本见 `THIRD_PARTY/opencode-MIT.txt`。
+
 ## 当前完成状态
 
 ### TypeScript TUI Agent

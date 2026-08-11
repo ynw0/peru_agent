@@ -291,6 +291,7 @@ test("权限协调器合并 Tool Manifest 与 AST 动态能力", async () => {
       certifiedComputerApplication: false,
       requestedCapabilities: ["network.internet"],
     },
+    [],
     async () => undefined,
     new AbortController().signal,
   );

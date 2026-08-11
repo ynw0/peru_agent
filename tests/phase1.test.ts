@@ -110,12 +110,17 @@ test("Workbench 状态可以通过事件重放恢复", () => {
     capabilities: ["workspace.write"],
     affectedFiles: ["src/app.ts"],
     reason: "写入修改",
+    permission: "edit",
+    patterns: ["src/app.ts"],
+    always: ["*"],
+    metadata: {},
   });
   const resolved = projectWorkbenchSnapshot(permission, {
     type: "permission.resolved",
     sessionId: "session-1",
     requestId: "permission-1",
     decision: "deny",
+    reply: "reject",
   });
 
   assert.equal(planned.plans[0]?.confidence, 92);
