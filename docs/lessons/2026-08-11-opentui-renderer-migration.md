@@ -18,12 +18,21 @@ Ink 的输入模型和 OpenCode 当前使用的 OpenTUI renderer 不同。为了
 
 ## 迁移边界
 
-Phase 1 已覆盖 renderer bootstrap、首次配置、会话 ScrollBox、键盘输入、粘贴、Selection copy、Permission/Diff/Plan 审核以及常用 slash command。Phase 2 继续迁移运行期 `/config`、外部路径授权、Shell 确认和运行中输入的 interrupt/guide/next 选择；外部路径的 `lstat/dirname` 授权准备逻辑从 UI 抽回 `TuiRuntime`，renderer 只提交用户决定。完整详情面板、结构化 Plan/Task 编辑器和 OpenTUI E2E 仍在后续阶段迁移；缺失能力必须明确拒绝，不能回退到 Ink。
+Renderer 迁移已经收口：
+
+- Phase 1：renderer bootstrap、首次配置、会话 ScrollBox、键盘输入、粘贴、Selection copy、Permission/Diff/Plan 审核和常用 slash command。
+- Phase 2：运行期 `/config`、外部路径授权、Shell 确认、运行中输入的 interrupt/guide/next；外部路径授权准备逻辑抽回 `TuiRuntime`。
+- Phase 3：`/`/`@` 补全、Tool/Diff/Checkpoint 可滚动详情、结构化 Plan/Task 编辑器；编辑器业务状态抽为共享纯 reducer。
+- Final cleanup：删除旧 Ink 产品 renderer、自定义 SGR mouse/hit-region/selection/OSC52 实现和 root `ink/react` 依赖；`tui:e2e` 改用 `@opentui/core/testing` 的 native TestRenderer、mock mouse 和 renderer Selection。
+
+旧 `src/tui/e2e.ts` 仍是 Runtime/Core 的真实 E2E，不属于 Ink renderer；其业务验收职责保持不变。
 
 ## 回归要求
 
 - `tui.ps1` 不得引用 `dist/src/tui/main.js` 或 `node.exe`。
 - OpenTUI main 必须使用 alternate-screen 且 `useMouse: true`。
 - Session 必须使用原生 ScrollBox，而不是终端主缓冲区 scrollback。
-- 新 renderer 不得导入手写 SGR 鼠标/Selection 实现。
+- 仓库不得重新引入 Ink 产品 renderer、手写 SGR 鼠标/Hit Region/Selection 或 Timeline OSC52 复制实现。
 - Selection 的 Ctrl+C 优先于“取消 Agent”；没有 Selection 时 Ctrl+C 才取消当前运行。
+
+- `npm run tui:e2e` 必须通过 OpenTUI 官方 TestRenderer 的 `mockMouse.scroll` / `mockMouse.drag` 验证滚动和原生 Selection。

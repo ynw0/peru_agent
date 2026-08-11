@@ -11,7 +11,7 @@
 
 ### TypeScript TUI Agent
 
-产品 TUI 正在从 Ink 迁移到与 OpenCode 同技术路线的 OpenTUI renderer：`@opentui/core` + `@opentui/react`。Agent Controller、Runtime、Session、Tool、Permission、Diff 和 Sandbox 不变，OpenTUI 只替换终端渲染/输入层。
+产品 TUI 已完成从 Ink 到 OpenTUI renderer 的切换，技术路线为 `@opentui/core` + `@opentui/react`。Agent Controller、Runtime、Session、Tool、Permission、Diff 和 Sandbox 保持原有事实来源，OpenTUI 只负责终端渲染、键盘/鼠标、Selection 和 ScrollBox。旧 Ink 产品 renderer、自定义 SGR 鼠标解析、手工 Selection 和 OSC52 Timeline 代码已删除。
 
 ```powershell
 .\tui.ps1 -Workspace "F:\study\project"
@@ -19,9 +19,17 @@
 
 Windows 11 x64 开发启动要求 **PowerShell 7 + Bun >= 1.3**。`tui.ps1` 首次运行会在 `tui-opentui/` 安装固定版本的 `@opentui/core@0.4.5`、`@opentui/react@0.4.5` 和 React 19.2；不会回退到 Node 22/Ink renderer。`-BuildOnly` 使用 Bun 对 OpenTUI 子包执行独立 TypeScript 检查。
 
+OpenTUI 验收命令：
+
+```powershell
+npm run tui:check
+npm run tui:e2e
+.\tui.ps1 -Workspace "F:\study\project"
+```
+
 首次运行配置向导已经迁到 OpenTUI，继续复用原有配置校验和 Sandbox Broker 健康检查。Session 主视图使用 OpenTUI 原生 `scrollbox`：鼠标滚轮、PageUp/PageDown 只滚当前 Agent 会话，不会暴露启动前 PowerShell/npm 历史；文本拖选使用 renderer 原生 Selection，鼠标松开或 Selection 存在时按 Ctrl+C 会写入 Windows 系统剪贴板。没有 Selection 时 Ctrl+C 才取消当前 Agent 运行。
 
-Permission 审核继续使用已迁移的 OpenCode `once / always / reject` 协议；Diff 与 Plan 审核也已接入 OpenTUI Overlay。Renderer Phase 1 已完成 bootstrap、resize、键盘输入、粘贴、Session 滚动/选择复制、首次配置和常用 slash command；Phase 2 已迁移运行期 `/config`、工作区外路径授权、`!shell` 确认以及运行中输入的 interrupt/guide/next 选择。完整 Tool/Diff/Transcript 详情交互、结构化 Plan/Task 编辑器和 OpenTUI E2E 继续在后续阶段迁移；不会偷偷启动旧 Ink UI。
+Permission 审核继续使用已迁移的 OpenCode `once / always / reject` 协议；Diff 与 Plan 审核也已接入 OpenTUI Overlay。Renderer Phase 1–3 已覆盖 bootstrap、resize、键盘/粘贴、Session ScrollBox、Selection copy、首次/运行期配置、外部路径授权、`!shell` 确认、运行中 interrupt/guide/next、`/`/`@` 补全、Tool/Diff/Checkpoint 可滚动详情以及结构化 Plan/Task 编辑器。`npm run tui:e2e` 使用 OpenTUI 官方 native TestRenderer 和 mock mouse 验证滚轮与拖选，不再运行 Ink Mock-TTY。
 
 - Phase 0：安全规则、协议和 TypeScript strict 基线；
 - Phase 1：独立产品身份、Typed IPC 和 Workbench 容器；

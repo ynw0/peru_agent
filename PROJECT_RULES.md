@@ -79,6 +79,7 @@
 ## AI IDE 交互层规则
 
 - 产品 TUI 使用 OpenTUI renderer；OpenTUI 是键盘、鼠标、Selection 和滚动的唯一所有者，禁止自行解析 SGR 鼠标、额外读取 stdin 或以终端主缓冲区 scrollback 代替 Session ScrollBox。
+- 已删除的 Ink 产品 renderer、SGR Mouse Decoder、Hit Region、手工 Selection 和 Timeline OSC52 代码不得重新引入；TUI E2E 必须使用 OpenTUI 官方 TestRenderer。
 - 所有流式更新实体必须在第一个 delta 前生成并发布稳定 ID。
 - Workbench 投影必须按 `sessionId` 隔离，后台会话事件不得覆盖当前会话状态。
 - 用于审计、排序和恢复的领域时间戳必须写入事件，禁止在重放时重新生成。

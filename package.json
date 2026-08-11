@@ -7,7 +7,7 @@
     "check": "tsc --noEmit",
     "build": "tsc",
     "tui": "pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tui.ps1",
-    "tui:e2e": "node -e \"throw new Error(\\\"OpenTUI E2E 尚未迁移；禁止回退到 Ink E2E\\\")\"",
+    "tui:e2e": "pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tui.ps1 -E2E",
     "tui:check": "pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tui.ps1 -BuildOnly",
     "test": "npm run build && node --test dist/tests/policies.test.js dist/tests/phase1.test.js dist/tests/phase2.test.js dist/tests/phase3.test.js dist/tests/phase4.test.js dist/tests/phase5.test.js dist/tests/phase6.test.js dist/tests/phase7.test.js dist/tests/phase8.test.js dist/tests/phase9.test.js dist/tests/phase10.test.js dist/tests/phase11.test.js dist/tests/phase12.test.js dist/tests/tui.test.js dist/tests/document-tools.test.js dist/tests/opentui-renderer.test.js",
     "smoke": "npm run build && node dist/src/smoke.js && node dist/src/phase1-smoke.js && node dist/src/phase2-smoke.js && node dist/src/phase3-smoke.js && node dist/src/phase4-smoke.js && node dist/src/phase5-smoke.js && node dist/src/phase6-smoke.js && node dist/src/phase7-smoke.js && node dist/src/phase8-smoke.js && node dist/src/phase9-smoke.js && node dist/src/phase10-smoke.js && node dist/src/phase11-smoke.js && node dist/src/phase12-smoke.js",
@@ -35,19 +35,16 @@
     "@pdf-lib/fontkit": "^1.1.1",
     "docx": "^9.7.1",
     "exceljs": "^4.4.0",
-    "ink": "^7.0.1",
     "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.2.108",
-    "react": "^19.2.0",
     "slice-ansi": "^9.0.0",
     "string-width": "^8.2.0",
     "wrap-ansi": "^10.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
-    "@types/react": "^19.0.0",
     "typescript": "^5.8.3"
   }
 }

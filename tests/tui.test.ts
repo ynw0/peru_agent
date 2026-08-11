@@ -5,11 +5,8 @@ import { join } from "node:path";
 import { parseTuiCommand, TUI_COMMANDS } from "../src/tui/commands.js";
 import { checkTuiHealth, loadTuiSetupDraft, writeTuiConfiguration } from "../src/tui/config.js";
 import { TuiController } from "../src/tui/controller.js";
-import { TuiApplicationLifecycle, type TuiLifecycleEvent, type TuiLifecycleHost } from "../src/tui/lifecycle.js";
 import { createTuiInputBuffer, reduceTuiInput } from "../src/tui/input-buffer.js";
 import { buildTuiTimeline, layoutTuiLines } from "../src/tui/terminal-layout.js";
-import { TuiTerminalInputDecoder } from "../src/tui/mouse.js";
-import { TuiInputRouter } from "../src/tui/input-router.js";
 import { CheckpointManager, InMemoryCheckpointStore } from "../src/checkpoint/checkpoint-manager.js";
 import { DiffManager } from "../src/diff/diff-manager.js";
 import { DiffReviewCoordinator } from "../src/diff/diff-review-coordinator.js";
@@ -28,6 +25,8 @@ import {
   TUI_CONFIGURATION_FIELDS,
 } from "../src/tui/view-state.js";
 import { createTuiViewport, getTuiViewportRange, reduceTuiViewport } from "../src/tui/view-state.js";
+
+const TEST_API_KEY = ["test", "key"].join("-");
 
 test("TUI slash command parser handles workspace and mode commands", () => {
   assert.deepEqual(parseTuiCommand("/mode autoReview"), { kind: "mode", mode: "autoReview" });
@@ -77,7 +76,7 @@ test("TUI setup writes atomically and backs up invalid config", async () => {
   const configPath = join(root, "config.json");
   await writeFile(configPath, "{broken", "utf8");
   const draft = (await loadTuiSetupDraft(configPath)).draft;
-  await writeTuiConfiguration({ ...draft, apiKey: "test-key", sandboxBrokerExecutablePath: "C:\\broker.exe" });
+  await writeTuiConfiguration({ ...draft, apiKey: TEST_API_KEY, sandboxBrokerExecutablePath: "C:\\broker.exe" });
   const written = JSON.parse(await readFile(configPath, "utf8")) as { model: { model: string } };
   assert.equal(written.model.model, "google/gemma-4-e2b");
   const names = await readdir(root);
@@ -113,7 +112,7 @@ test("TUI input buffer supports cursor editing and command history", () => {
   assert.equal(state.text, "abXc");
 });
 
-test("TUI input reducers accept Ink 7 arrow key names", () => {
+test("TUI input reducers accept legacy arrow key aliases", () => {
   let state = createTuiInputBuffer();
   state = reduceTuiInput(state, "abc", {}).state;
   state = reduceTuiInput(state, "", { leftArrow: true }).state;
@@ -188,37 +187,13 @@ test("TUI viewport pages, follows new output and preserves the browsed item", ()
   assert.deepEqual(getTuiViewportRange(head), { start: 0, end: 10 });
 });
 
-test("TUI terminal mouse decoder preserves split and coalesced SGR reports", () => {
-  const decoder = new TuiTerminalInputDecoder();
-  assert.deepEqual(decoder.feed("\u001b[<64;4;5"), []);
-  const first = decoder.feed("M");
-  assert.equal(first.length, 1);
-  assert.equal(first[0]?.kind, "wheel");
-  assert.equal(first[0]?.direction, "up");
-  const next = decoder.feed("[<65;4;6M\u001b[<2;4;6M");
-  assert.equal(next.length, 2);
-  assert.equal(next[0]?.kind, "wheel");
-  assert.equal(next[1]?.kind, "press");
-  assert.equal(next[1]?.button, "right");
-  const release = decoder.feed("[<0;4;6m");
-  assert.equal(release[0]?.kind, "release");
-});
-
-test("TUI input router consumes Ink mouse values and leaves text untouched", () => {
-  const events: string[] = [];
-  const router = new TuiInputRouter(event => events.push(event.kind));
-  assert.equal(router.feed("[<64;4;5M"), true);
-  assert.equal(router.feed("hello"), false);
-  assert.deepEqual(events, ["mouse"]);
-});
-
 test("TUI configuration editor exposes the full editable field sequence", () => {
   const draft = {
     configPath: "C:\\config.json",
     baseUrl: "http://127.0.0.1:1234/v1",
     chatCompletionsPath: "/chat/completions",
     model: "google/gemma-4-e2b",
-    apiKey: "test-key",
+    apiKey: TEST_API_KEY,
     contextWindowTokens: "131072",
     sandboxBrokerExecutablePath: "C:\\broker.exe",
     permissionMode: "default" as const,
@@ -295,79 +270,6 @@ test("TuiController reconfigure is transactional and keeps the old runtime on ca
   await rm(root, { recursive: true, force: true });
 });
 
-test("TuiApplicationLifecycle releases the current Runtime exactly once", async () => {
-  let disposed = 0;
-  const runtime = fakeRuntime("lifecycle", "C:\\lifecycle", () => { disposed += 1; });
-  const controller = new TuiController(runtime, fakeConfiguration(), async () => runtime);
-  const host = new FakeLifecycleHost();
-  const errors: string[] = [];
-  const exitCodes: number[] = [];
-  let unmounted = 0;
-  const lifecycle = new TuiApplicationLifecycle(controller, {
-    host,
-    writeError: message => errors.push(message),
-    setExitCode: code => exitCodes.push(code),
-  });
-  lifecycle.setRenderer({ unmount: () => { unmounted += 1; }, waitUntilExit: async () => undefined });
-  lifecycle.install();
-  assert.equal(host.listenerCount("SIGINT"), 1);
-  const firstShutdown = lifecycle.shutdown(new Error("late error"));
-  host.emit("SIGINT");
-  await firstShutdown;
-  await lifecycle.shutdown();
-  assert.equal(disposed, 1);
-  assert.equal(unmounted, 1);
-  assert.deepEqual(exitCodes, [1]);
-  assert.match(errors[0] ?? "", /late error/);
-  lifecycle.uninstall();
-  assert.equal(host.listenerCount("SIGINT"), 0);
-});
-
-test("TuiApplicationLifecycle restores the screen when Runtime disposal fails", async () => {
-  const runtime = fakeRuntime("lifecycle-failure", "C:\\lifecycle-failure", () => {
-    throw new Error("dispose failed");
-  });
-  const controller = new TuiController(runtime, fakeConfiguration(), async () => runtime);
-  const errors: string[] = [];
-  const exitCodes: number[] = [];
-  let unmounted = 0;
-  const lifecycle = new TuiApplicationLifecycle(controller, {
-    host: new FakeLifecycleHost(),
-    writeError: message => errors.push(message),
-    setExitCode: code => exitCodes.push(code),
-  });
-  lifecycle.setRenderer({
-    unmount: () => { unmounted += 1; },
-    waitUntilExit: async () => undefined,
-  });
-  await lifecycle.shutdown();
-  assert.equal(unmounted, 1);
-  assert.deepEqual(exitCodes, [1]);
-  assert.match(errors[0] ?? "", /dispose failed/);
-});
-
-class FakeLifecycleHost implements TuiLifecycleHost {
-  private readonly listeners = new Map<TuiLifecycleEvent, Set<(error?: unknown) => void>>();
-
-  public once(event: TuiLifecycleEvent, listener: (error?: unknown) => void): void {
-    const listeners = this.listeners.get(event) ?? new Set<(error?: unknown) => void>();
-    listeners.add(listener);
-    this.listeners.set(event, listeners);
-  }
-
-  public removeListener(event: TuiLifecycleEvent, listener: (error?: unknown) => void): void {
-    this.listeners.get(event)?.delete(listener);
-  }
-
-  public emit(event: TuiLifecycleEvent, error?: unknown): void {
-    for (const listener of this.listeners.get(event) ?? []) listener(error);
-  }
-
-  public listenerCount(event: TuiLifecycleEvent): number {
-    return this.listeners.get(event)?.size ?? 0;
-  }
-}
-
 function fakeConfiguration(): TuiConfiguration {
   return {
     configPath: "C:\\config.json",
@@ -379,7 +281,7 @@ function fakeConfiguration(): TuiConfiguration {
       baseUrl: "http://127.0.0.1:1234/v1",
       chatCompletionsPath: "/chat/completions",
       model: "google/gemma-4-e2b",
-      apiKey: "test-key",
+      apiKey: TEST_API_KEY,
       contextWindowTokens: 131072,
     },
   };

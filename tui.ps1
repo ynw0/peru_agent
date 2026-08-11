@@ -1,7 +1,8 @@
 ﻿[CmdletBinding()]
 param(
     [string]$Workspace = (Get-Location).Path,
-    [switch]$BuildOnly
+    [switch]$BuildOnly,
+    [switch]$E2E
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +15,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 $projectRoot = (Resolve-Path -LiteralPath $PSScriptRoot).Path
 $openTuiRoot = Join-Path $projectRoot 'tui-opentui'
 $entryPath = Join-Path $openTuiRoot 'src\main.tsx'
+$e2ePath = Join-Path $openTuiRoot 'src\e2e.tsx'
 $packagePath = Join-Path $openTuiRoot 'package.json'
 
 $bunCommand = Get-Command bun.exe -ErrorAction SilentlyContinue
@@ -58,6 +60,11 @@ if ($dependencyMarkers | Where-Object { -not (Test-Path -LiteralPath $_ -PathTyp
     } finally {
         Pop-Location
     }
+}
+
+if ($E2E) {
+    & $bunPath $e2ePath
+    exit $LASTEXITCODE
 }
 
 if ($BuildOnly) {

@@ -8,15 +8,20 @@ import {
   useTerminalDimensions,
 } from "@opentui/react";
 import type { AgentSessionSnapshot, AgentUserInput } from "../../src/agent/types.js";
+import type { CheckpointRecord } from "../../src/checkpoint/checkpoint-manager.js";
 import type { DiffProposal } from "../../src/diff/diff-manager.js";
-import { parseTuiCommand, TUI_HELP, type TuiCommand } from "../../src/tui/commands.js";
+import type { ToolActivityView } from "../../src/workbench/workbench-state.js";
+import type { TuiToolResultDetail } from "../../src/tui/runtime.js";
+import { parseTuiCommand, TUI_COMMANDS, TUI_HELP, type TuiCommand } from "../../src/tui/commands.js";
 import { configurationFromTuiSetupDraft, configurationToTuiSetupDraft } from "../../src/tui/config.js";
 import { TuiController, type TuiControllerState } from "../../src/tui/controller.js";
 import { createTuiInputBuffer, reduceTuiInput, type TuiInputBufferState } from "../../src/tui/input-buffer.js";
 import { buildTuiConversationTurns, flattenTuiConversationTurns, getTuiInputWindow, layoutTuiLines } from "../../src/tui/terminal-layout.js";
 import { adaptOpenTuiKey } from "../../src/tui/opentui-key-adapter.js";
+import { acceptTuiSuggestion, getTuiSuggestions, type TuiSuggestion } from "../../src/tui/suggestions.js";
 import { copyRendererSelection } from "./selection.js";
 import { OpenTuiConfigurationEditor } from "./setup.js";
+import { OpenTuiPlanEditor, OpenTuiTaskEditor } from "./orchestration-editors.js";
 
 interface OpenTuiAppProps {
   readonly controller: TuiController;
@@ -26,13 +31,18 @@ interface OpenTuiAppProps {
 type Panel =
   | { readonly kind: "help"; readonly title: string; readonly lines: readonly string[] }
   | { readonly kind: "sessions"; readonly title: string; readonly sessions: readonly AgentSessionSnapshot[]; readonly selected: number }
+  | { readonly kind: "tools"; readonly title: string; readonly tools: readonly ToolActivityView[]; readonly selected: number }
+  | { readonly kind: "diffs"; readonly title: string; readonly diffs: readonly DiffProposal[]; readonly selected: number }
+  | { readonly kind: "checkpoints"; readonly title: string; readonly checkpoints: readonly CheckpointRecord[]; readonly selected: number }
   | { readonly kind: "text"; readonly title: string; readonly lines: readonly string[] };
 
 type ActionDialog =
   | { readonly kind: "externalAccess"; readonly input: string; readonly paths: readonly string[] }
   | { readonly kind: "shell"; readonly command: string }
   | { readonly kind: "queueChoice"; readonly input: string; readonly prepared: AgentUserInput }
-  | { readonly kind: "config" };
+  | { readonly kind: "config" }
+  | { readonly kind: "planEditor"; readonly instruction?: string }
+  | { readonly kind: "taskEditor"; readonly instruction?: string };
 
 export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
   const renderer = useRenderer();
@@ -43,6 +53,8 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
   const [dialog, setDialog] = useState<ActionDialog | undefined>();
   const [selectionActive, setSelectionActive] = useState(false);
   const [verboseTranscript, setVerboseTranscript] = useState(false);
+  const [suggestions, setSuggestions] = useState<readonly TuiSuggestion[]>([]);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
 
   useEffect(() => {
     const subscription = controller.onState(next => setState(next));
@@ -52,6 +64,26 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
     void controller.doctor().catch(() => undefined);
     return () => subscription.dispose();
   }, [controller]);
+
+  useEffect(() => {
+    const current = input.text;
+    if (current.trimStart().startsWith("/")) {
+      setSuggestions(getTuiSuggestions(current, TUI_COMMANDS, []));
+      setSuggestionIndex(0);
+      return;
+    }
+    const match = /(?:^|\s)@([^\s]*)$/.exec(current);
+    if (match !== null) {
+      void controller.getRuntime().suggestFiles(match[1] ?? "")
+        .then(files => {
+          setSuggestions(getTuiSuggestions(current, TUI_COMMANDS, files));
+          setSuggestionIndex(0);
+        })
+        .catch(() => setSuggestions([]));
+      return;
+    }
+    setSuggestions([]);
+  }, [input.text, controller]);
 
   useSelectionHandler(selection => {
     setSelectionActive(selection.getSelectedText() !== "");
@@ -94,7 +126,7 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
       }
     }
 
-    if (dialog?.kind === "config") return;
+    if (dialog?.kind === "config" || dialog?.kind === "planEditor" || dialog?.kind === "taskEditor") return;
 
     if (dialog !== undefined) {
       void handleDialogKey(dialog, adapted.value, adapted.key);
@@ -145,27 +177,21 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
         event.stopPropagation();
         return;
       }
-      if (panel.kind === "sessions") {
-        if (adapted.key.up || adapted.key.upArrow) {
-          setPanel({ ...panel, selected: cycleIndex(panel.selected, panel.sessions.length, -1) });
-          event.preventDefault();
-          return;
-        }
-        if (adapted.key.down || adapted.key.downArrow) {
-          setPanel({ ...panel, selected: cycleIndex(panel.selected, panel.sessions.length, 1) });
-          event.preventDefault();
-          return;
-        }
-        if (adapted.key.return) {
-          const selected = panel.sessions[panel.selected];
-          if (selected !== undefined) {
-            void controller.activateSession(selected.id)
-              .then(() => setPanel(undefined))
-              .catch(error => controller.setStatus(errorMessage(error)));
-          }
-          event.preventDefault();
-          return;
-        }
+      const selectableCount = panelItemCount(panel);
+      if (selectableCount > 0 && (adapted.key.up || adapted.key.upArrow)) {
+        setPanel(updatePanelSelection(panel, cycleIndex(panelSelection(panel), selectableCount, -1)));
+        event.preventDefault();
+        return;
+      }
+      if (selectableCount > 0 && (adapted.key.down || adapted.key.downArrow)) {
+        setPanel(updatePanelSelection(panel, cycleIndex(panelSelection(panel), selectableCount, 1)));
+        event.preventDefault();
+        return;
+      }
+      if (adapted.key.return && selectableCount > 0) {
+        void activatePanelSelection(panel);
+        event.preventDefault();
+        return;
       }
       return;
     }
@@ -182,6 +208,34 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
       controller.setStatus(verboseTranscript ? "已关闭 Verbose Transcript" : "已开启 Verbose Transcript");
       event.preventDefault();
       return;
+    }
+
+    if (suggestions.length > 0) {
+      if (adapted.key.escape) {
+        setSuggestions([]);
+        event.preventDefault();
+        return;
+      }
+      if (adapted.key.upArrow) {
+        setSuggestionIndex(current => cycleIndex(current, suggestions.length, -1));
+        event.preventDefault();
+        return;
+      }
+      if (adapted.key.downArrow) {
+        setSuggestionIndex(current => cycleIndex(current, suggestions.length, 1));
+        event.preventDefault();
+        return;
+      }
+      if (adapted.key.tab) {
+        const selected = suggestions[suggestionIndex];
+        if (selected !== undefined) {
+          const accepted = acceptTuiSuggestion(input.text, selected);
+          setInput(current => ({ ...current, text: accepted, cursor: accepted.length }));
+          setSuggestions([]);
+        }
+        event.preventDefault();
+        return;
+      }
     }
 
     // PageUp/PageDown/Home/End 交给 focused OpenTUI ScrollBox 原生处理。
@@ -240,7 +294,43 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
     }
   }
 
-  async function handleDialogKey(dialogState: Exclude<ActionDialog, { readonly kind: "config" }>, value: string, key: ReturnType<typeof adaptOpenTuiKey>["key"]): Promise<void> {
+  async function activatePanelSelection(current: Panel): Promise<void> {
+    try {
+      if (current.kind === "sessions") {
+        const selected = current.sessions[current.selected];
+        if (selected !== undefined) {
+          await controller.activateSession(selected.id);
+          setPanel(undefined);
+        }
+        return;
+      }
+      if (current.kind === "tools") {
+        const tool = current.tools[current.selected];
+        if (tool === undefined) return;
+        const detail = await controller.getToolResult(tool.toolCallId);
+        setPanel({ kind: "text", title: `${tool.toolName} · ${tool.toolCallId}`, lines: toolDetailLines(tool, detail, state.runtime.workspaceRoot) });
+        return;
+      }
+      if (current.kind === "diffs") {
+        const selected = current.diffs[current.selected];
+        if (selected === undefined) return;
+        setPanel({ kind: "text", title: `Diff ${selected.id} · ${selected.status}`, lines: selected.changes.flatMap(change => [change.path, change.unifiedDiff, ""]) });
+        return;
+      }
+      if (current.kind === "checkpoints") {
+        const selected = current.checkpoints[current.selected];
+        if (selected === undefined) return;
+        setPanel({ kind: "text", title: `Checkpoint ${selected.id}`, lines: [
+          `status=${selected.status}`,
+          ...selected.files.map(file => `${file.path} · ${file.before.exists ? "exists" : "missing"}`),
+        ] });
+      }
+    } catch (error: unknown) {
+      controller.setStatus(errorMessage(error));
+    }
+  }
+
+  async function handleDialogKey(dialogState: Exclude<ActionDialog, { readonly kind: "config" | "planEditor" | "taskEditor" }>, value: string, key: ReturnType<typeof adaptOpenTuiKey>["key"]): Promise<void> {
     const choice = value.toLocaleLowerCase();
     if (dialogState.kind === "externalAccess") {
       if (key.escape || choice === "r" || choice === "d") {
@@ -343,15 +433,19 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
         case "mode":
           await controller.createSession(command.mode);
           return;
-        case "diffs":
-          setPanel({ kind: "text", title: "Diff 队列", lines: controller.listDiffs().map(formatDiff) });
+        case "diffs": {
+          const diffs = controller.listDiffs();
+          setPanel({ kind: "diffs", title: "Diff 队列", diffs, selected: 0 });
           return;
+        }
         case "permissions":
           setPanel({ kind: "text", title: "权限队列", lines: state.snapshot.pendingPermissions.map(item => `${item.toolName} · ${item.permission} · ${item.patterns.join(", ")}`) });
           return;
-        case "checkpoints":
-          setPanel({ kind: "text", title: "Checkpoints", lines: (await controller.listCheckpoints()).map(item => `${item.id} · ${item.status}`) });
+        case "checkpoints": {
+          const checkpoints = await controller.listCheckpoints();
+          setPanel({ kind: "checkpoints", title: "Checkpoints", checkpoints, selected: 0 });
           return;
+        }
         case "restore":
           await controller.restoreCheckpoint(command.checkpointId);
           return;
@@ -363,9 +457,11 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
           setPanel({ kind: "text", title: "Doctor", lines: [...health.messages, `overall=${health.ok ? "ok" : "failed"}`] });
           return;
         }
-        case "tools":
-          setPanel({ kind: "text", title: "Tools", lines: controller.listTools().map(item => `${item.name} · ${item.description ?? ""}`) });
+        case "tools": {
+          const tools = state.snapshot.tools.slice(-50);
+          setPanel({ kind: "tools", title: "Tools", tools, selected: Math.max(0, tools.length - 1) });
           return;
+        }
         case "rename":
           if (command.title === undefined) controller.setStatus("用法：/rename 新名称");
           else await controller.renameActiveSession(command.title);
@@ -396,16 +492,14 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
           setPanel({ kind: "text", title: "Plans", lines: controller.listPlans().map(item => `${item.title} · ${item.status} · ${item.confidence}%`) });
           return;
         case "plan":
-          if (command.instruction === undefined) controller.setStatus("用法：/plan 规划说明");
-          else await controller.createPlan(command.instruction);
+          setDialog({ kind: "planEditor", ...(command.instruction === undefined ? {} : { instruction: command.instruction }) });
           return;
         case "tasks":
         case "subagents":
           setPanel({ kind: "text", title: "子 Agent", lines: controller.listTasks().map(item => `${item.id} · ${item.role} · ${item.status}`) });
           return;
         case "task":
-          if (command.instruction === undefined) controller.setStatus("用法：/task 任务说明");
-          else await controller.dispatchTask(command.instruction);
+          setDialog({ kind: "taskEditor", ...(command.instruction === undefined ? {} : { instruction: command.instruction }) });
           return;
         case "trash":
           setPanel({ kind: "text", title: "回收区", lines: (await controller.listTrash()).map(item => `${item.snapshot.title ?? "（未命名）"} · ${item.snapshot.id} · ${item.deletedAt}`) });
@@ -473,6 +567,16 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
         )}
       </scrollbox>
 
+      {suggestions.length > 0 && (
+        <box flexDirection="column" paddingX={2} maxHeight={9}>
+          <text fg="#8b949e" selectable={false}>建议（↑/↓ 选择 · Tab 接受 · Esc 关闭）</text>
+          {suggestions.slice(0, 8).map((item, index) => (
+            <text key={`${item.kind}-${item.value}`} fg={index === suggestionIndex ? "#f4a261" : "#c9d1d9"} selectable={false}>
+              {index === suggestionIndex ? "› " : "  "}{item.value}{item.description === undefined ? "" : ` · ${item.description}`}
+            </text>
+          ))}
+        </box>
+      )}
       <box border borderColor="#30363d" paddingX={1} marginX={1}>
         <text selectable={false}><span fg="#f4a261">› </span>{inputWindow.before}<span fg="#f4a261">▌</span>{inputWindow.after}</text>
       </box>
@@ -494,6 +598,28 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
           onSubmitDraft={async draft => {
             await controller.reconfigure(await configurationFromTuiSetupDraft(draft));
             setDialog(undefined);
+          }}
+        />
+      )}
+      {dialog?.kind === "planEditor" && (
+        <OpenTuiPlanEditor
+          {...(dialog.instruction === undefined ? {} : { instruction: dialog.instruction })}
+          onCancel={() => setDialog(undefined)}
+          onSubmit={async planInput => {
+            await controller.createStructuredPlan(planInput);
+            setDialog(undefined);
+            controller.setStatus("Plan 已创建，等待审核");
+          }}
+        />
+      )}
+      {dialog?.kind === "taskEditor" && (
+        <OpenTuiTaskEditor
+          {...(dialog.instruction === undefined ? {} : { instruction: dialog.instruction })}
+          onCancel={() => setDialog(undefined)}
+          onSubmit={async taskInput => {
+            await controller.dispatchStructuredTask(taskInput);
+            setDialog(undefined);
+            controller.setStatus(taskInput.role === "implementer" ? "Implementer 已排队，等待确认启动" : "只读子 Agent 已启动");
           }}
         />
       )}
@@ -578,17 +704,68 @@ function PlanModal({ plan }: { readonly plan: TuiControllerState["snapshot"]["pl
 }
 
 function PanelModal({ panel, height }: { readonly panel: Panel; readonly height: number }): ReactNode {
-  const lines = panel.kind === "sessions"
-    ? panel.sessions.map((item, index) => `${index === panel.selected ? "›" : " "} ${item.title ?? "（未命名）"} · ${item.status} · ${item.updatedAt}`)
-    : panel.lines;
+  const lines = panelLines(panel);
+  const selectable = panelItemCount(panel) > 0;
   return (
     <Modal title={panel.title}>
       <scrollbox scrollY focused height={Math.max(6, Math.floor(height * 0.45))} viewportCulling>
         {lines.length === 0 ? <text fg="#8b949e">当前没有项目</text> : lines.map((line, index) => <text key={`${panel.title}-${index}`}>{line}</text>)}
       </scrollbox>
-      <text fg="#8b949e">Esc 返回{panel.kind === "sessions" ? " · ↑/↓ 选择 · Enter 恢复" : ""}</text>
+      <text fg="#8b949e">Esc 返回{selectable ? " · ↑/↓ 选择 · Enter 查看" : " · wheel/PgUp/PgDn 浏览"}</text>
     </Modal>
   );
+}
+
+function panelLines(panel: Panel): readonly string[] {
+  if (panel.kind === "sessions") return panel.sessions.map((item, index) => `${index === panel.selected ? "›" : " "} ${item.title ?? "（未命名）"} · ${item.status} · ${item.updatedAt}`);
+  if (panel.kind === "tools") return panel.tools.map((item, index) => `${index === panel.selected ? "›" : " "} ${item.toolName} · ${item.state} · ${item.toolCallId}`);
+  if (panel.kind === "diffs") return panel.diffs.map((item, index) => `${index === panel.selected ? "›" : " "} ${formatDiff(item)}`);
+  if (panel.kind === "checkpoints") return panel.checkpoints.map((item, index) => `${index === panel.selected ? "›" : " "} ${item.id} · ${item.status}`);
+  return panel.lines;
+}
+
+function panelItemCount(panel: Panel): number {
+  if (panel.kind === "sessions") return panel.sessions.length;
+  if (panel.kind === "tools") return panel.tools.length;
+  if (panel.kind === "diffs") return panel.diffs.length;
+  if (panel.kind === "checkpoints") return panel.checkpoints.length;
+  return 0;
+}
+
+function panelSelection(panel: Panel): number {
+  return "selected" in panel ? panel.selected : 0;
+}
+
+function updatePanelSelection(panel: Panel, selected: number): Panel {
+  if (panel.kind === "sessions") return { ...panel, selected };
+  if (panel.kind === "tools") return { ...panel, selected };
+  if (panel.kind === "diffs") return { ...panel, selected };
+  if (panel.kind === "checkpoints") return { ...panel, selected };
+  return panel;
+}
+
+function toolDetailLines(tool: ToolActivityView, detail: TuiToolResultDetail | undefined, workspaceRoot: string): readonly string[] {
+  const metadata = [
+    `Tool：${tool.toolName} · 状态：${tool.state}`,
+    `脚本：${tool.commandText ?? "（无）"}`,
+    `CWD：${workspaceRoot}`,
+    `动态能力：${tool.capabilities.join(", ") || "无"}`,
+    `网络目标：${tool.networkTargets.join(", ") || "无"}`,
+    `影响文件：${tool.affectedFiles.join(", ") || "无"}`,
+  ];
+  if (detail === undefined) return [...metadata, "没有持久化 Tool 结果"];
+  if (detail.powerShell === undefined) return [...metadata, detail.content];
+  const result = detail.powerShell;
+  return [
+    ...metadata,
+    `exitCode=${result.exitCode} timedOut=${result.timedOut} interrupted=${result.interrupted}`,
+    `durationMs=${result.durationMs}`,
+    `auditLogPath=${result.auditLogPath}`,
+    "--- stdout ---",
+    result.stdout || "（空）",
+    "--- stderr ---",
+    result.stderr || "（空）",
+  ];
 }
 
 function Modal({ title, children }: { readonly title: string; readonly children: ReactNode }): ReactNode {
