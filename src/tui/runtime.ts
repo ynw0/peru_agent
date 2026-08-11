@@ -72,6 +72,7 @@ export interface TuiRuntime {
   getExternalPathCandidates(input: string): readonly string[];
   authorizeExternalDirectory(path: string): Promise<ExternalDirectoryGrant>;
   prepareAuthorizedExternalInput(input: string, paths: readonly string[]): Promise<AgentUserInput>;
+  authorizeAndPrepareExternalInput(input: string, paths: readonly string[]): Promise<AgentUserInput>;
   authorizeAndSendExternalInput(input: string, paths: readonly string[]): Promise<{ readonly runId: string }>;
   queueInput(input: AgentUserInput, priority: AgentQueuePriority): Promise<AgentQueuedInput>;
   listQueuedInputs(): Promise<readonly AgentQueuedInput[]>;
@@ -266,9 +267,29 @@ class TuiRuntimeImpl implements TuiRuntime {
     return started;
   }
 
+  public async authorizeAndPrepareExternalInput(input: string, paths: readonly string[]): Promise<AgentUserInput> {
+    if (this.disposed) throw new Error("TUI Runtime 已关闭");
+    const sessionId = this.activeSessionId;
+    const prepared = await this.prepareExternalInputForSession(input, paths, sessionId);
+    if (this.activeSessionId !== sessionId) throw new Error("授权期间活动 Session 已切换，未生成输入");
+    return prepared;
+  }
+
   public async authorizeAndSendExternalInput(input: string, paths: readonly string[]): Promise<{ readonly runId: string }> {
     if (this.disposed) throw new Error("TUI Runtime 已关闭");
     const sessionId = this.activeSessionId;
+    const prepared = await this.prepareExternalInputForSession(input, paths, sessionId);
+    if (this.activeSessionId !== sessionId) throw new Error("授权期间活动 Session 已切换，未发送输入");
+    const started = await this.agent.startSession(sessionId, prepared);
+    this.trackRun(started.runId);
+    return started;
+  }
+
+  private async prepareExternalInputForSession(
+    input: string,
+    paths: readonly string[],
+    sessionId: string,
+  ): Promise<AgentUserInput> {
     const directories: string[] = [];
     for (const path of paths) {
       const status = await lstat(path).catch(() => undefined);
@@ -276,11 +297,7 @@ class TuiRuntimeImpl implements TuiRuntime {
       directories.push(status.isDirectory() ? path : dirname(path));
     }
     for (const directory of new Set(directories)) await this.externalAccess.authorizeDirectory(sessionId, directory);
-    const prepared = await buildAuthorizedExternalUserInput(input, paths, this.externalAccess, sessionId);
-    if (this.activeSessionId !== sessionId) throw new Error("授权期间活动 Session 已切换，未发送输入");
-    const started = await this.agent.startSession(sessionId, prepared);
-    this.trackRun(started.runId);
-    return started;
+    return buildAuthorizedExternalUserInput(input, paths, this.externalAccess, sessionId);
   }
 
   private trackRun(runId: string): void {

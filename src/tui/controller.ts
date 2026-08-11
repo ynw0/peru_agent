@@ -125,6 +125,7 @@ export class TuiController {
   public getExternalPathCandidates(input: string): readonly string[] { return this.runtime.getExternalPathCandidates(input); }
   public authorizeExternalDirectory(path: string): Promise<import("./external-access.js").ExternalDirectoryGrant> { return this.runtime.authorizeExternalDirectory(path); }
   public prepareAuthorizedExternalInput(input: string, paths: readonly string[]): Promise<AgentUserInput> { return this.runtime.prepareAuthorizedExternalInput(input, paths); }
+  public authorizeAndPrepareExternalInput(input: string, paths: readonly string[]): Promise<AgentUserInput> { return this.runtime.authorizeAndPrepareExternalInput(input, paths); }
   public async authorizeAndSendExternalInput(input: string, paths: readonly string[]): Promise<{ readonly runId: string }> {
     const started = await this.runtime.authorizeAndSendExternalInput(input, paths);
     this.setStatus(`运行中：${started.runId}`);

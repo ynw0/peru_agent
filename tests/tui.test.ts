@@ -414,6 +414,7 @@ function fakeRuntime(workspaceId: string, workspaceRoot: string, dispose: () => 
     getExternalPathCandidates: () => [],
     authorizeExternalDirectory: async () => ({ id: "external", sessionId: session.id, directory: "C:\\external", createdAt: "2026-01-01T00:00:00.000Z" }),
     prepareAuthorizedExternalInput: async content => ({ content }),
+    authorizeAndPrepareExternalInput: async content => ({ content }),
     authorizeAndSendExternalInput: async () => ({ runId: "run" }),
     queueInput: async (input, priority) => ({ id: "queue", input, priority, createdAt: "2026-01-01T00:00:00.000Z" }),
     listQueuedInputs: async () => [],

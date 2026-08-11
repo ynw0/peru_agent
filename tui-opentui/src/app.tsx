@@ -7,14 +7,16 @@ import {
   useSelectionHandler,
   useTerminalDimensions,
 } from "@opentui/react";
-import type { AgentSessionSnapshot } from "../../src/agent/types.js";
+import type { AgentSessionSnapshot, AgentUserInput } from "../../src/agent/types.js";
 import type { DiffProposal } from "../../src/diff/diff-manager.js";
 import { parseTuiCommand, TUI_HELP, type TuiCommand } from "../../src/tui/commands.js";
+import { configurationFromTuiSetupDraft, configurationToTuiSetupDraft } from "../../src/tui/config.js";
 import { TuiController, type TuiControllerState } from "../../src/tui/controller.js";
 import { createTuiInputBuffer, reduceTuiInput, type TuiInputBufferState } from "../../src/tui/input-buffer.js";
 import { buildTuiConversationTurns, flattenTuiConversationTurns, getTuiInputWindow, layoutTuiLines } from "../../src/tui/terminal-layout.js";
 import { adaptOpenTuiKey } from "../../src/tui/opentui-key-adapter.js";
 import { copyRendererSelection } from "./selection.js";
+import { OpenTuiConfigurationEditor } from "./setup.js";
 
 interface OpenTuiAppProps {
   readonly controller: TuiController;
@@ -26,12 +28,19 @@ type Panel =
   | { readonly kind: "sessions"; readonly title: string; readonly sessions: readonly AgentSessionSnapshot[]; readonly selected: number }
   | { readonly kind: "text"; readonly title: string; readonly lines: readonly string[] };
 
+type ActionDialog =
+  | { readonly kind: "externalAccess"; readonly input: string; readonly paths: readonly string[] }
+  | { readonly kind: "shell"; readonly command: string }
+  | { readonly kind: "queueChoice"; readonly input: string; readonly prepared: AgentUserInput }
+  | { readonly kind: "config" };
+
 export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
   const renderer = useRenderer();
   const { width, height } = useTerminalDimensions();
   const [state, setState] = useState<TuiControllerState>(controller.getState());
   const [input, setInput] = useState<TuiInputBufferState>(createTuiInputBuffer());
   const [panel, setPanel] = useState<Panel | undefined>();
+  const [dialog, setDialog] = useState<ActionDialog | undefined>();
   const [selectionActive, setSelectionActive] = useState(false);
   const [verboseTranscript, setVerboseTranscript] = useState(false);
 
@@ -64,7 +73,7 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
   const permission = state.snapshot.pendingPermissions[0];
   const diff = state.snapshot.diffProposals.find(item => item.status === "proposed");
   const plan = state.snapshot.plans.find(item => item.status === "reviewing");
-  const modalOpen = permission !== undefined || diff !== undefined || plan !== undefined || panel !== undefined;
+  const modalOpen = permission !== undefined || diff !== undefined || plan !== undefined || panel !== undefined || dialog !== undefined;
 
   useKeyboard(event => {
     const adapted = adaptOpenTuiKey(event);
@@ -83,6 +92,15 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
         event.stopPropagation();
         return;
       }
+    }
+
+    if (dialog?.kind === "config") return;
+
+    if (dialog !== undefined) {
+      void handleDialogKey(dialog, adapted.value, adapted.key);
+      event.preventDefault();
+      event.stopPropagation();
+      return;
     }
 
     if (permission !== undefined) {
@@ -201,24 +219,89 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
 
     const external = controller.getExternalPathCandidates(value);
     if (external.length > 0) {
-      controller.setStatus(`检测到工作区外路径，Phase 1 尚未迁移授权对话框：${external.join(", ")}`);
+      setDialog({ kind: "externalAccess", input: value, paths: external });
       return;
     }
     if (value.startsWith("!") && value.slice(1).trim() !== "") {
-      controller.setStatus("Shell 确认对话框将在 OpenTUI Phase 2 迁移；当前不会执行该命令");
+      setDialog({ kind: "shell", command: value.slice(1).trim() });
       return;
     }
 
     try {
       const prepared = await controller.prepareUserInput(value);
       if (isRunActive(state)) {
-        await controller.queueInput(prepared, "next");
-        controller.setStatus("当前运行中，输入已排队到下一轮");
+        setDialog({ kind: "queueChoice", input: value, prepared });
       } else {
         await controller.sendInput(prepared);
+        await controller.recordInputHistory(value);
       }
-      await controller.recordInputHistory(value);
     } catch (error: unknown) {
+      controller.setStatus(errorMessage(error));
+    }
+  }
+
+  async function handleDialogKey(dialogState: Exclude<ActionDialog, { readonly kind: "config" }>, value: string, key: ReturnType<typeof adaptOpenTuiKey>["key"]): Promise<void> {
+    const choice = value.toLocaleLowerCase();
+    if (dialogState.kind === "externalAccess") {
+      if (key.escape || choice === "r" || choice === "d") {
+        setDialog(undefined);
+        controller.setStatus("已拒绝外部目录访问");
+        return;
+      }
+      if (choice !== "a") return;
+      try {
+        if (isRunActive(state)) {
+          const prepared = await controller.authorizeAndPrepareExternalInput(dialogState.input, dialogState.paths);
+          setDialog({ kind: "queueChoice", input: dialogState.input, prepared });
+        } else {
+          await controller.authorizeAndSendExternalInput(dialogState.input, dialogState.paths);
+          await controller.recordInputHistory(dialogState.input);
+          setDialog(undefined);
+        }
+      } catch (error: unknown) {
+        setDialog(undefined);
+        controller.setStatus(errorMessage(error));
+      }
+      return;
+    }
+
+    if (dialogState.kind === "shell") {
+      if (key.escape || choice === "r" || choice === "d") {
+        setDialog(undefined);
+        controller.setStatus("已取消 Shell 命令");
+        return;
+      }
+      if (choice !== "a") return;
+      try {
+        const prompt = `请通过 bash Tool（Windows Sandbox Broker）执行以下用户明确确认的命令：${dialogState.command}`;
+        const prepared = await controller.prepareUserInput(prompt);
+        if (isRunActive(state)) {
+          setDialog({ kind: "queueChoice", input: `!${dialogState.command}`, prepared });
+        } else {
+          await controller.sendInput(prepared);
+          await controller.recordInputHistory(`!${dialogState.command}`);
+          setDialog(undefined);
+        }
+      } catch (error: unknown) {
+        setDialog(undefined);
+        controller.setStatus(errorMessage(error));
+      }
+      return;
+    }
+
+    if (key.escape || choice === "x") {
+      setDialog(undefined);
+      return;
+    }
+    const priority = choice === "i" ? "immediate" : choice === "g" ? "guide" : choice === "l" ? "next" : undefined;
+    if (priority === undefined) return;
+    try {
+      await controller.queueInput(dialogState.prepared, priority);
+      await controller.recordInputHistory(dialogState.input);
+      setDialog(undefined);
+      controller.setStatus(priority === "immediate" ? "已中断当前运行，准备立即发送" : priority === "guide" ? "已引导当前运行" : "已排队到下一轮");
+    } catch (error: unknown) {
+      setDialog(undefined);
       controller.setStatus(errorMessage(error));
     }
   }
@@ -334,7 +417,8 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
           setPanel({ kind: "text", title: "内部 Commit 产物", lines: (await controller.listArtifacts()).map(item => `${item.id} · ${item.taskId} · ${item.files.length} files`) });
           return;
         case "config":
-          controller.setStatus("运行期配置编辑将在 OpenTUI Phase 2 迁移；首次启动配置已使用 OpenTUI");
+          if (isRunActive(state)) throw new Error("运行期间不能修改配置，请先按 Ctrl+C");
+          setDialog({ kind: "config" });
           return;
         case "clear":
           renderer.clearSelection();
@@ -397,6 +481,22 @@ export function OpenTuiApp({ controller, onExit }: OpenTuiAppProps): ReactNode {
         <text fg="#8b949e" selectable={false}>{state.snapshot.sessionStatus} · context {contextTokens}/{contextWindow} ({contextPercent}%) · wheel/PgUp/PgDn scroll · drag select/copy · Ctrl+C cancel</text>
       </box>
 
+      {dialog?.kind === "externalAccess" && <ExternalAccessModal input={dialog.input} paths={dialog.paths} />}
+      {dialog?.kind === "shell" && <ShellModal command={dialog.command} />}
+      {dialog?.kind === "queueChoice" && <QueueChoiceModal input={dialog.input} />}
+      {dialog?.kind === "config" && (
+        <OpenTuiConfigurationEditor
+          draft={configurationToTuiSetupDraft(state.configuration)}
+          title="运行期配置"
+          submitStatus="正在验证并切换 TUI 配置…"
+          embedded
+          onCancel={() => setDialog(undefined)}
+          onSubmitDraft={async draft => {
+            await controller.reconfigure(await configurationFromTuiSetupDraft(draft));
+            setDialog(undefined);
+          }}
+        />
+      )}
       {permission !== undefined && <PermissionModal request={permission} />}
       {diff !== undefined && <DiffModal diff={controller.getDiff(diff.proposalId)} proposalId={diff.proposalId} />}
       {plan !== undefined && <PlanModal plan={plan} />}
@@ -412,6 +512,36 @@ function TimelineLine({ line }: { readonly line: ReturnType<typeof layoutTuiLine
     : line.role === "user" ? "#ffffff" : line.role === "summary" ? "#d29922" : "#c9d1d9";
   const accent = line.kind === "tool" ? "#58a6ff" : line.role === "user" ? "#39c5cf" : "#f4a261";
   return <text fg={fg} selectionBg="#264f78" selectionFg="#ffffff"><span fg={accent}>┃ </span>{line.text}</text>;
+}
+
+function ExternalAccessModal({ input, paths }: { readonly input: string; readonly paths: readonly string[] }): ReactNode {
+  return (
+    <Modal title="Authorize external paths">
+      <text>Agent 请求访问工作区外路径：</text>
+      {paths.map(path => <text key={path}>- {path}</text>)}
+      <text fg="#8b949e">输入：{input}</text>
+      <text fg="#f4a261">[A] Authorize for this Session   [R/Esc] Reject</text>
+    </Modal>
+  );
+}
+
+function ShellModal({ command }: { readonly command: string }): ReactNode {
+  return (
+    <Modal title="Confirm shell command">
+      <text>该命令将通过 bash Tool + Windows Sandbox Broker 执行：</text>
+      <text fg="#58a6ff">$ {command}</text>
+      <text fg="#f4a261">[A] Confirm   [R/Esc] Cancel</text>
+    </Modal>
+  );
+}
+
+function QueueChoiceModal({ input }: { readonly input: string }): ReactNode {
+  return (
+    <Modal title="Active run input">
+      <text>{input}</text>
+      <text fg="#f4a261">[I] Interrupt/send   [G] Guide current run   [L] Queue next   [Esc] Cancel</text>
+    </Modal>
+  );
 }
 
 function PermissionModal({ request }: { readonly request: TuiControllerState["snapshot"]["pendingPermissions"][number] }): ReactNode {

@@ -21,7 +21,7 @@ Windows 11 x64 开发启动要求 **PowerShell 7 + Bun >= 1.3**。`tui.ps1` 首�
 
 首次运行配置向导已经迁到 OpenTUI，继续复用原有配置校验和 Sandbox Broker 健康检查。Session 主视图使用 OpenTUI 原生 `scrollbox`：鼠标滚轮、PageUp/PageDown 只滚当前 Agent 会话，不会暴露启动前 PowerShell/npm 历史；文本拖选使用 renderer 原生 Selection，鼠标松开或 Selection 存在时按 Ctrl+C 会写入 Windows 系统剪贴板。没有 Selection 时 Ctrl+C 才取消当前 Agent 运行。
 
-Permission 审核继续使用已迁移的 OpenCode `once / always / reject` 协议；Diff 与 Plan 审核也已接入 OpenTUI Overlay。当前 Phase 1 已迁移 renderer bootstrap、resize、键盘输入、粘贴、Session 滚动/选择复制、首次配置和常用 slash command。运行期 `/config`、外部路径授权对话框、Shell 确认、完整详情面板和 OpenTUI E2E 会在后续阶段迁移；这些缺失能力会明确拒绝，不会偷偷启动旧 Ink UI。
+Permission 审核继续使用已迁移的 OpenCode `once / always / reject` 协议；Diff 与 Plan 审核也已接入 OpenTUI Overlay。Renderer Phase 1 已完成 bootstrap、resize、键盘输入、粘贴、Session 滚动/选择复制、首次配置和常用 slash command；Phase 2 已迁移运行期 `/config`、工作区外路径授权、`!shell` 确认以及运行中输入的 interrupt/guide/next 选择。完整 Tool/Diff/Transcript 详情交互、结构化 Plan/Task 编辑器和 OpenTUI E2E 继续在后续阶段迁移；不会偷偷启动旧 Ink UI。
 
 - Phase 0：安全规则、协议和 TypeScript strict 基线；
 - Phase 1：独立产品身份、Typed IPC 和 Workbench 容器；

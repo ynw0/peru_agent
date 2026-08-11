@@ -5,6 +5,7 @@ import {
   loadTuiConfiguration,
   writeTuiConfiguration,
   type TuiConfiguration,
+  type TuiHealthReport,
   type TuiSetupDraft,
 } from "../../src/tui/config.js";
 import {
@@ -26,7 +27,52 @@ export interface OpenTuiSetupProps {
   readonly onCancel: (error: Error) => void;
 }
 
+export interface OpenTuiConfigurationEditorResult {
+  readonly keepOpen?: boolean;
+  readonly status?: string;
+  readonly health?: TuiHealthReport;
+}
+
+export interface OpenTuiConfigurationEditorProps {
+  readonly draft: TuiSetupDraft;
+  readonly reason?: string;
+  readonly title: string;
+  readonly submitStatus: string;
+  readonly embedded?: boolean;
+  readonly onSubmitDraft: (draft: TuiSetupDraft) => Promise<OpenTuiConfigurationEditorResult | void>;
+  readonly onCancel: () => void;
+}
+
 export function OpenTuiSetup({ draft, reason, onConfigured, onCancel }: OpenTuiSetupProps): ReactNode {
+  return (
+    <OpenTuiConfigurationEditor
+      draft={draft}
+      {...(reason === undefined ? {} : { reason })}
+      title="peru_agent · OpenTUI 配置"
+      submitStatus="正在检查模型端点和 Sandbox Broker…"
+      onCancel={() => onCancel(new Error("OpenTUI 配置向导已取消"))}
+      onSubmitDraft={async nextDraft => {
+        const health = await checkTuiHealth(nextDraft);
+        if (!health.ok) {
+          return { keepOpen: true, status: "检查未通过：修正字段后再次按 Enter。", health };
+        }
+        await writeTuiConfiguration(nextDraft);
+        const configuration = await loadTuiConfiguration(nextDraft.configPath);
+        onConfigured(configuration);
+      }}
+    />
+  );
+}
+
+export function OpenTuiConfigurationEditor({
+  draft,
+  reason,
+  title,
+  submitStatus,
+  embedded = false,
+  onSubmitDraft,
+  onCancel,
+}: OpenTuiConfigurationEditorProps): ReactNode {
   const [state, setState] = useState<TuiConfigurationEditorState>(() => createTuiConfigurationEditor(draft, reason));
   const { width } = useTerminalDimensions();
 
@@ -41,41 +87,54 @@ export function OpenTuiSetup({ draft, reason, onConfigured, onCancel }: OpenTuiS
     if (transition.cancelled === true) {
       event.preventDefault();
       event.stopPropagation();
-      onCancel(new Error("OpenTUI 配置向导已取消"));
+      onCancel();
       return;
     }
     setState(transition.state);
     if (transition.submitted !== undefined) void submit(transition.submitted);
+    event.preventDefault();
+    event.stopPropagation();
   });
 
   async function submit(nextDraft: TuiSetupDraft): Promise<void> {
     setState(current => setTuiConfigurationEditorBusy(
-      setTuiConfigurationEditorStatus(current, "正在检查模型端点和 Sandbox Broker…"),
+      setTuiConfigurationEditorStatus(current, submitStatus),
       true,
     ));
     try {
-      const health = await checkTuiHealth(nextDraft);
-      if (!health.ok) {
+      const result = await onSubmitDraft(nextDraft);
+      if (result?.keepOpen === true) {
         setState(current => setTuiConfigurationEditorBusy(
-          setTuiConfigurationEditorStatus(current, "检查未通过：修正字段后再次按 Enter。", health),
+          setTuiConfigurationEditorStatus(current, result.status ?? "请修正配置后重试", result.health),
           false,
         ));
-        return;
       }
-      await writeTuiConfiguration(nextDraft);
-      const configuration = await loadTuiConfiguration(nextDraft.configPath);
-      onConfigured(configuration);
     } catch (error: unknown) {
       setState(current => setTuiConfigurationEditorBusy(
-        setTuiConfigurationEditorStatus(current, error instanceof Error ? error.message : "配置保存失败"),
+        setTuiConfigurationEditorStatus(current, error instanceof Error ? error.message : "配置应用失败"),
         false,
       ));
     }
   }
 
+  const container = embedded
+    ? {
+        position: "absolute" as const,
+        left: "5%" as const,
+        top: "5%" as const,
+        width: "90%" as const,
+        height: "90%" as const,
+        zIndex: 200,
+        border: true,
+        borderStyle: "double" as const,
+        borderColor: "#f4a261",
+        backgroundColor: "#0d1117",
+      }
+    : { width: "100%" as const, height: "100%" as const };
+
   return (
-    <box flexDirection="column" width="100%" height="100%" padding={2}>
-      <text fg="#f4a261"><strong>peru_agent · OpenTUI 配置</strong></text>
+    <box flexDirection="column" padding={2} {...container}>
+      <text fg="#f4a261"><strong>{title}</strong></text>
       <text fg="#8b949e">{state.status}</text>
       <text fg="#8b949e">↑/↓ 或 Tab 选择 · Enter 下一项/保存 · ←/→ 或 Space 切换 · Esc 取消</text>
       <box flexDirection="column" marginTop={1}>

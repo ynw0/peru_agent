@@ -18,7 +18,7 @@ Ink 的输入模型和 OpenCode 当前使用的 OpenTUI renderer 不同。为了
 
 ## 迁移边界
 
-Phase 1 已覆盖 renderer bootstrap、首次配置、会话 ScrollBox、键盘输入、粘贴、Selection copy、Permission/Diff/Plan 审核以及常用 slash command。运行期 `/config`、外部路径授权对话框、Shell 确认、完整详情面板和 OpenTUI E2E 在后续阶段迁移；缺失能力必须明确拒绝，不能回退到 Ink。
+Phase 1 已覆盖 renderer bootstrap、首次配置、会话 ScrollBox、键盘输入、粘贴、Selection copy、Permission/Diff/Plan 审核以及常用 slash command。Phase 2 继续迁移运行期 `/config`、外部路径授权、Shell 确认和运行中输入的 interrupt/guide/next 选择；外部路径的 `lstat/dirname` 授权准备逻辑从 UI 抽回 `TuiRuntime`，renderer 只提交用户决定。完整详情面板、结构化 Plan/Task 编辑器和 OpenTUI E2E 仍在后续阶段迁移；缺失能力必须明确拒绝，不能回退到 Ink。
 
 ## 回归要求
 

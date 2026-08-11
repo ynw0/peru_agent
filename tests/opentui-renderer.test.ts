@@ -53,3 +53,25 @@ test("OpenTUI key adapter reuses the existing input reducer contract", () => {
     key: { shift: true },
   });
 });
+
+test("OpenTUI Phase 2 owns config, external path, shell and active-run confirmation dialogs", async () => {
+  const [app, setup, runtime] = await Promise.all([
+    read("tui-opentui/src/app.tsx"),
+    read("tui-opentui/src/setup.tsx"),
+    read("src/tui/runtime.ts"),
+  ]);
+
+  assert.match(app, /kind: "externalAccess"/);
+  assert.match(app, /authorizeAndPrepareExternalInput/);
+  assert.match(app, /kind: "shell"/);
+  assert.match(app, /Windows Sandbox Broker/);
+  assert.match(app, /kind: "queueChoice"/);
+  assert.match(app, /"immediate"/);
+  assert.match(app, /"guide"/);
+  assert.match(app, /"next"/);
+  assert.match(app, /OpenTuiConfigurationEditor/);
+  assert.match(app, /configurationFromTuiSetupDraft/);
+  assert.match(setup, /export function OpenTuiConfigurationEditor/);
+  assert.match(runtime, /authorizeAndPrepareExternalInput/);
+  assert.doesNotMatch(app, /Phase 1 尚未迁移授权对话框|Shell 确认对话框将在 OpenTUI Phase 2/);
+});
