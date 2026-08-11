@@ -237,13 +237,14 @@ test("TUI configuration editor exposes the full editable field sequence", () => 
   assert.equal(cancelled.cancelled, true);
 });
 
-test("repository TUI launcher pins Node 22 and uses a stable build stamp", async () => {
+test("repository TUI launcher requires Bun/OpenTUI and has no Ink runtime fallback", async () => {
   const launcher = await readFile(join(process.cwd(), "tui.ps1"), "utf8");
-  assert.match(launcher, /\[switch\]\$ForceBuild/);
-  assert.match(launcher, /\[switch\]\$BuildOnly/);
-  assert.match(launcher, /vendor\\node22-22\.14\.0/);
-  assert.match(launcher, /Get-FileHash/);
-  assert.match(launcher, /sandbox:build-windows/);
+  assert.match(launcher, /Bun >= 1\.3/);
+  assert.match(launcher, /tui-opentui/);
+  assert.match(launcher, /bun\.exe/);
+  assert.match(launcher, /不会回退到 Ink\/Node TUI/);
+  assert.doesNotMatch(launcher, /vendor\\node22/);
+  assert.doesNotMatch(launcher, /dist\\src\\tui\\main\.js/);
 });
 
 test("TuiController keeps the current runtime when workspace creation fails and disposes it after a successful switch", async () => {
